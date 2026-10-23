@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow any device to read and log power outages without requiring user login
+    match /power_status/{docId} {
+      allow read, write: if true;
+    }
+    match /outage_logs/{logId} {
+      allow read, write: if true;
+    }
+    match /settings/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
