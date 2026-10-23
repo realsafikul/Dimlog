@@ -1,0 +1,17 @@
+{
+  "name": "VoltLog – Power Cut & Generator Monitor",
+  "short_name": "VoltLog",
+  "description": "One-tap electricity outage tracker, automated generator status logger, and interactive 24-hour power grid timeline",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0d1c",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

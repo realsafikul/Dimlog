@@ -1,0 +1,6 @@
+{
+  "name": "VoltLog – Power Cut & Generator Monitor",
+  "description": "One-tap electricity outage tracker, automated generator status logger, and interactive 24-hour power grid timeline optimized for mobile, tablet, and PC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
