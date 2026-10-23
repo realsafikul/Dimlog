@@ -1,0 +1,54 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "power_status": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      ".validate": "newData.hasChildren(['isOutage', 'updatedAt'])",
+      "isOutage": {
+        ".validate": "newData.isBoolean()"
+      },
+      "outAt": {
+        ".validate": "newData.val() === null || newData.isNumber()"
+      },
+      "updatedAt": {
+        ".validate": "newData.isNumber()"
+      }
+    },
+
+    "logs": {
+      ".read": "auth != null",
+      ".indexOn": ["ts", "type"],
+      "$logId": {
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['type', 'ts'])",
+        "type": {
+          ".validate": "newData.val() === 'out' || newData.val() === 'in'"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "note": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        }
+      }
+    },
+
+    "settings": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}

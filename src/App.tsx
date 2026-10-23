@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { User, onAuthStateChanged, Auth } from 'firebase/auth';
+import { Database } from 'firebase/database';
 import { LogEntry, AppSettings } from './types';
 import { 
   loadStoredData, 
@@ -10,6 +12,15 @@ import {
   formatDurationMinutes
 } from './utils/storage';
 import { playOutChime, playInChime, playClickSound, triggerHaptic } from './utils/audio';
+import { initFirebase, auth as defaultAuth, db as defaultDb } from './firebase/config';
+import { 
+  subscribeToPowerStatus, 
+  subscribeToLogs, 
+  recordPowerEventCloud, 
+  saveManualEntryCloud, 
+  deleteEntryCloud, 
+  clearAllCloud 
+} from './firebase/db';
 import { Header } from './components/Header';
 import { PowerControlCard } from './components/PowerControlCard';
 import { TimelineChart } from './components/TimelineChart';
@@ -17,18 +28,28 @@ import { ReportLog } from './components/ReportLog';
 import { ManualEntryModal } from './components/ManualEntryModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
+import { AuthModal } from './components/AuthModal';
+import { MigrationModal } from './components/MigrationModal';
 import { WorkflowGuide } from './components/WorkflowGuide';
 import { FloatingMobileBar } from './components/FloatingMobileBar';
-import { Flame, DollarSign, Activity, Sparkles, Check, AlertCircle } from 'lucide-react';
+import { Flame, Cloud, Database as DbIcon, Loader2, RefreshCw } from 'lucide-react';
 
 export default function App() {
-  // Main state synced with localStorage key "power-report-v1"
+  // Main data state
   const [log, setLog] = useState<LogEntry[]>([]);
   const [outAt, setOutAt] = useState<number | null>(null);
+  const [localLog, setLocalLog] = useState<LogEntry[]>([]);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Firebase state
+  const [firebaseAuth, setFirebaseAuth] = useState<Auth | null>(defaultAuth);
+  const [firebaseDb, setFirebaseDb] = useState<Database | null>(defaultDb);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [networkError, setNetworkError] = useState<boolean>(false);
 
   // Undo state
   const [previousState, setPreviousState] = useState<{ log: LogEntry[]; outAt: number | null } | null>(null);
@@ -39,17 +60,31 @@ export default function App() {
   const [editingEntry, setEditingEntry] = useState<{ entry: LogEntry; index: number } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false);
 
   // Toast banner state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastTimer, setToastTimer] = useState<NodeJS.Timeout | null>(null);
 
-  // Show floating bar when scrolled down on mobile
+  // Scroll listener for mobile thumb bar
   const [isScrolledDown, setIsScrolledDown] = useState(false);
 
-  // Load initial data from localStorage on mount
+  // Toast trigger helper
+  const showToast = useCallback((msg: string) => {
+    if (toastTimer) clearTimeout(toastTimer);
+    setToastMessage(msg);
+    const t = setTimeout(() => {
+      setToastMessage(null);
+    }, 2800);
+    setToastTimer(t);
+  }, [toastTimer]);
+
+  // Load initial local data from localStorage on mount
   useEffect(() => {
     const data = loadStoredData();
+    setLocalLog(data.log);
+    // If not yet connected to Firebase, use local data
     setLog(data.log);
     setOutAt(data.outAt);
 
@@ -75,22 +110,80 @@ export default function App() {
     localStorage.setItem('voltlog-theme', theme);
   }, [theme]);
 
-  // Persist state to localStorage
-  const updateData = useCallback((newLog: LogEntry[], newOutAt: number | null) => {
-    setLog(newLog);
-    setOutAt(newOutAt);
-    saveStoredData(newLog, newOutAt);
-  }, []);
+  // Firebase Auth state listener
+  useEffect(() => {
+    if (!firebaseAuth) return;
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      setCurrentUser(user);
+      if (user) {
+        setNetworkError(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [firebaseAuth]);
 
-  // Toast trigger helper
-  const showToast = useCallback((msg: string) => {
-    if (toastTimer) clearTimeout(toastTimer);
-    setToastMessage(msg);
-    const t = setTimeout(() => {
-      setToastMessage(null);
-    }, 2400);
-    setToastTimer(t);
-  }, [toastTimer]);
+  // Real-time Database sync when user is authenticated
+  useEffect(() => {
+    if (!firebaseDb || !currentUser) {
+      return;
+    }
+
+    setIsSyncing(true);
+    let unsubStatus: (() => void) | undefined;
+    let unsubLogs: (() => void) | undefined;
+
+    try {
+      // 1. Subscribe to power_status
+      unsubStatus = subscribeToPowerStatus(
+        firebaseDb,
+        (statusPayload) => {
+          setIsSyncing(false);
+          setNetworkError(false);
+          if (statusPayload) {
+            setOutAt(statusPayload.isOutage ? statusPayload.outAt : null);
+          }
+        },
+        (err) => {
+          console.warn('Realtime Database power_status error:', err);
+          setNetworkError(true);
+          setIsSyncing(false);
+        }
+      );
+
+      // 2. Subscribe to logs
+      unsubLogs = subscribeToLogs(
+        firebaseDb,
+        (cloudLogs) => {
+          setIsSyncing(false);
+          setNetworkError(false);
+          setLog(cloudLogs);
+          // Also keep local storage updated as an offline backup
+          saveStoredData(cloudLogs, outAt);
+        },
+        (err) => {
+          console.warn('Realtime Database logs error:', err);
+          setNetworkError(true);
+          setIsSyncing(false);
+        }
+      );
+    } catch (err) {
+      console.error('Firebase subscription initialization error:', err);
+      setNetworkError(true);
+      setIsSyncing(false);
+    }
+
+    return () => {
+      if (unsubStatus) unsubStatus();
+      if (unsubLogs) unsubLogs();
+    };
+  }, [firebaseDb, currentUser]);
+
+  // Handle API key updates
+  const handleApiKeySaved = (newKey: string) => {
+    const instances = initFirebase(newKey);
+    setFirebaseAuth(instances.auth);
+    setFirebaseDb(instances.db);
+  };
 
   // Real-time second clock ticker
   useEffect(() => {
@@ -137,118 +230,203 @@ export default function App() {
   // Time since last power restoration
   const stableSeconds = useMemo(() => {
     if (outAt !== null) return 0;
-    // Find the latest restoration entry
     const lastInEntry = [...log].reverse().find((e) => e.type === 'in');
     if (!lastInEntry) return 0;
     return Math.max(0, Math.floor((nowMs - lastInEntry.ts) / 1000));
   }, [log, outAt, nowMs]);
 
-  // Core 1-tap power toggle handler
-  const handleTogglePower = useCallback(() => {
+  // Core 1-tap power toggle handler (with Cloud and Local fallback)
+  const handleTogglePower = useCallback(async () => {
     const now = Date.now();
-    // Save previous state for undo capability
     setPreviousState({ log: [...log], outAt });
     if (undoTimeout) clearTimeout(undoTimeout);
     const t = setTimeout(() => setPreviousState(null), 9000);
     setUndoTimeout(t);
 
     triggerHaptic(45, settings.hapticsEnabled);
+    const isNowOut = outAt === null;
 
-    if (outAt === null) {
-      // Power cut event
-      playOutChime(settings.soundEnabled);
-      const newEntry: LogEntry = {
-        id: `entry-${now}-${log.length}`,
-        type: 'out',
-        ts: now,
-      };
-      const newLog = [...log, newEntry];
-      updateData(newLog, now);
-      showToast('⚡ Electricity Out recorded · Generator ON');
+    if (currentUser && firebaseDb) {
+      // Cloud update in Firebase Realtime Database
+      setIsSyncing(true);
+      try {
+        await recordPowerEventCloud(
+          firebaseDb,
+          isNowOut ? 'out' : 'in',
+          now,
+          currentUser
+        );
+        setIsSyncing(false);
+        setNetworkError(false);
+
+        if (isNowOut) {
+          playOutChime(settings.soundEnabled);
+          showToast('⚡ Electricity Out saved to Firebase · Generator ON');
+        } else {
+          playInChime(settings.soundEnabled);
+          showToast('💡 Electricity Back saved to Firebase · Generator OFF');
+        }
+      } catch (err: any) {
+        console.error('Firebase save error:', err);
+        setIsSyncing(false);
+        setNetworkError(true);
+        showToast('⚠️ Cloud save failed: ' + (err.message || 'Check network / rules'));
+      }
     } else {
-      // Power restored event
-      playInChime(settings.soundEnabled);
+      // Local-only mode
       const newEntry: LogEntry = {
         id: `entry-${now}-${log.length}`,
-        type: 'in',
+        type: isNowOut ? 'out' : 'in',
         ts: now,
       };
       const newLog = [...log, newEntry];
-      updateData(newLog, null);
-      showToast('💡 Electricity Back recorded · Generator OFF');
+      const newOutAt = isNowOut ? now : null;
+      setLog(newLog);
+      setOutAt(newOutAt);
+      saveStoredData(newLog, newOutAt);
+
+      if (isNowOut) {
+        playOutChime(settings.soundEnabled);
+        showToast('⚡ Electricity Out recorded locally (Sign in to sync)');
+      } else {
+        playInChime(settings.soundEnabled);
+        showToast('💡 Electricity Back recorded locally (Sign in to sync)');
+      }
     }
-  }, [log, outAt, settings, undoTimeout, updateData, showToast]);
+  }, [log, outAt, currentUser, firebaseDb, settings, undoTimeout, showToast]);
 
   // Undo handler
-  const handleUndo = useCallback(() => {
+  const handleUndo = useCallback(async () => {
     if (!previousState) return;
     playClickSound(settings.soundEnabled);
-    updateData(previousState.log, previousState.outAt);
-    setPreviousState(null);
-    showToast('Reverted to previous state');
-  }, [previousState, settings, updateData, showToast]);
+
+    if (currentUser && firebaseDb) {
+      setIsSyncing(true);
+      try {
+        // If undoing, revert power_status and last entry
+        const lastEntry = log[log.length - 1];
+        if (lastEntry) {
+          await deleteEntryCloud(firebaseDb, lastEntry.id, previousState.log, currentUser);
+        }
+        setIsSyncing(false);
+        setPreviousState(null);
+        showToast('Reverted cloud state');
+      } catch (err: any) {
+        setIsSyncing(false);
+        showToast('Failed to revert cloud entry: ' + err.message);
+      }
+    } else {
+      setLog(previousState.log);
+      setOutAt(previousState.outAt);
+      saveStoredData(previousState.log, previousState.outAt);
+      setPreviousState(null);
+      showToast('Reverted to previous state');
+    }
+  }, [previousState, currentUser, firebaseDb, log, settings, showToast]);
 
   // Delete an entry
-  const handleDeleteEntry = useCallback((index: number) => {
-    const newLog = [...log];
-    const removed = newLog.splice(index, 1)[0];
-    
-    // If we removed the active outage entry, recalculate outAt
-    let newOutAt = outAt;
-    const lastEntry = newLog[newLog.length - 1];
-    if (lastEntry && lastEntry.type === 'out') {
-      newOutAt = lastEntry.ts;
-    } else {
-      newOutAt = null;
-    }
+  const handleDeleteEntry = useCallback(async (index: number) => {
+    const target = log[index];
+    if (!target) return;
 
-    updateData(newLog, newOutAt);
-    playClickSound(settings.soundEnabled);
-    showToast('Entry removed');
-  }, [log, outAt, settings, updateData, showToast]);
+    if (currentUser && firebaseDb) {
+      setIsSyncing(true);
+      try {
+        await deleteEntryCloud(firebaseDb, target.id, log, currentUser);
+        setIsSyncing(false);
+        playClickSound(settings.soundEnabled);
+        showToast('Entry deleted from Firebase ✓');
+      } catch (err: any) {
+        setIsSyncing(false);
+        showToast('Delete failed: ' + err.message);
+      }
+    } else {
+      const newLog = [...log];
+      newLog.splice(index, 1);
+      const lastEntry = newLog[newLog.length - 1];
+      const newOutAt = lastEntry && lastEntry.type === 'out' ? lastEntry.ts : null;
+      setLog(newLog);
+      setOutAt(newOutAt);
+      saveStoredData(newLog, newOutAt);
+      playClickSound(settings.soundEnabled);
+      showToast('Entry removed locally');
+    }
+  }, [log, currentUser, firebaseDb, settings, showToast]);
 
   // Edit or add entry from modal
-  const handleSaveModalEntry = useCallback((entryData: { type: 'out' | 'in'; ts: number; note?: string; id?: string }, editIndex?: number) => {
-    const newLog = [...log];
-    if (typeof editIndex === 'number' && editIndex >= 0 && editIndex < newLog.length) {
-      // Edit existing
-      newLog[editIndex] = {
-        ...newLog[editIndex],
-        type: entryData.type,
-        ts: entryData.ts,
-        note: entryData.note,
-      };
+  const handleSaveModalEntry = useCallback(async (
+    entryData: { type: 'out' | 'in'; ts: number; note?: string; id?: string },
+    editIndex?: number
+  ) => {
+    if (currentUser && firebaseDb) {
+      setIsSyncing(true);
+      try {
+        const entryId = entryData.id || `manual-${entryData.ts}-${Date.now()}`;
+        const newEntry: LogEntry = {
+          id: entryId,
+          type: entryData.type,
+          ts: entryData.ts,
+          note: entryData.note,
+        };
+        const isLatest = typeof editIndex !== 'number' || editIndex === log.length - 1;
+        await saveManualEntryCloud(firebaseDb, newEntry, currentUser, isLatest);
+        setIsSyncing(false);
+        showToast('Entry saved to Firebase ✓');
+      } catch (err: any) {
+        setIsSyncing(false);
+        showToast('Cloud save failed: ' + err.message);
+      }
     } else {
-      // Add new
-      newLog.push({
-        id: entryData.id || `manual-${entryData.ts}-${Date.now()}`,
-        type: entryData.type,
-        ts: entryData.ts,
-        note: entryData.note,
-      });
+      const newLog = [...log];
+      if (typeof editIndex === 'number' && editIndex >= 0 && editIndex < newLog.length) {
+        newLog[editIndex] = {
+          ...newLog[editIndex],
+          type: entryData.type,
+          ts: entryData.ts,
+          note: entryData.note,
+        };
+      } else {
+        newLog.push({
+          id: entryData.id || `manual-${entryData.ts}-${Date.now()}`,
+          type: entryData.type,
+          ts: entryData.ts,
+          note: entryData.note,
+        });
+      }
+      newLog.sort((a, b) => a.ts - b.ts);
+      const lastEntry = newLog[newLog.length - 1];
+      const newOutAt = lastEntry && lastEntry.type === 'out' ? lastEntry.ts : null;
+      setLog(newLog);
+      setOutAt(newOutAt);
+      saveStoredData(newLog, newOutAt);
+      showToast(typeof editIndex === 'number' ? 'Entry updated locally' : 'Past entry added locally');
     }
+  }, [currentUser, firebaseDb, log, showToast]);
 
-    // Sort log chronologically
-    newLog.sort((a, b) => a.ts - b.ts);
-
-    // Determine current active status from chronologically latest entry
-    const lastEntry = newLog[newLog.length - 1];
-    const newOutAt = lastEntry && lastEntry.type === 'out' ? lastEntry.ts : null;
-
-    updateData(newLog, newOutAt);
-    showToast(typeof editIndex === 'number' ? 'Entry updated' : 'Past entry added');
-  }, [log, updateData, showToast]);
-
-  // Clear all with confirmation
-  const handleClearAll = useCallback(() => {
+  // Clear all logs with confirmation
+  const handleClearAll = useCallback(async () => {
     if (log.length === 0 && outAt === null) return;
-    if (window.confirm('Clear all recorded entries and reset VoltLog?')) {
-      updateData([], null);
-      showToast('All data cleared');
+    if (window.confirm('Clear all recorded entries in VoltLog?')) {
+      if (currentUser && firebaseDb) {
+        setIsSyncing(true);
+        try {
+          await clearAllCloud(firebaseDb, currentUser);
+          setIsSyncing(false);
+          showToast('All logs cleared from Firebase ✓');
+        } catch (err: any) {
+          setIsSyncing(false);
+          showToast('Failed to clear cloud logs: ' + err.message);
+        }
+      } else {
+        setLog([]);
+        setOutAt(null);
+        saveStoredData([], null);
+        showToast('All local logs cleared');
+      }
     }
-  }, [log, outAt, updateData, showToast]);
+  }, [log, outAt, currentUser, firebaseDb, showToast]);
 
-  // Sample data generator for testing / previewing full features
+  // Sample data generator for demonstration
   const handleAddSampleData = useCallback(() => {
     const now = Date.now();
     const h = 3600000;
@@ -260,14 +438,15 @@ export default function App() {
       { id: 'sample-5', type: 'out', ts: now - 3.5 * h, note: 'Transformer load shedding' },
       { id: 'sample-6', type: 'in', ts: now - 2.8 * h },
     ];
-    updateData(samples, null);
+    setLog(samples);
+    setOutAt(null);
+    saveStoredData(samples, null);
     showToast('Loaded sample 24-hour power events');
-  }, [updateData, showToast]);
+  }, [showToast]);
 
   // Keyboard shortcuts listener for PC users
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         return;
       }
@@ -303,6 +482,8 @@ export default function App() {
         setIsManualModalOpen(false);
         setIsSettingsOpen(false);
         setIsShortcutsOpen(false);
+        setIsAuthModalOpen(false);
+        setIsMigrationModalOpen(false);
       }
     };
 
@@ -357,6 +538,12 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
+          currentUser={currentUser}
+          isSyncing={isSyncing}
+          networkError={networkError}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+          localEntriesCount={localLog.length}
+          onOpenMigration={() => setIsMigrationModalOpen(true)}
         />
 
         {/* Responsive Dashboard Grid */}
@@ -464,12 +651,12 @@ export default function App() {
             <span className="font-bold bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
               Safikul Islam
             </span>{' '}
-            · VoltLog Power Cut &amp; Generator Monitor
+            · VoltLog Cloud Edition (dimlog-d0f35)
           </p>
         </footer>
       </main>
 
-      {/* Floating Mobile Bar (Only active on mobile screens when scrolled) */}
+      {/* Floating Mobile Bar */}
       {isScrolledDown && (
         <FloatingMobileBar
           isOutage={outAt !== null}
@@ -506,7 +693,9 @@ export default function App() {
         log={log}
         outAt={outAt}
         onImportJSON={(data) => {
-          updateData(data.log, data.outAt);
+          setLog(data.log);
+          setOutAt(data.outAt);
+          saveStoredData(data.log, data.outAt);
         }}
         onClearAll={handleClearAll}
         onToast={showToast}
@@ -515,6 +704,31 @@ export default function App() {
       <ShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={currentUser}
+        auth={firebaseAuth}
+        onApiKeySaved={handleApiKeySaved}
+        onToast={showToast}
+      />
+
+      <MigrationModal
+        isOpen={isMigrationModalOpen}
+        onClose={() => setIsMigrationModalOpen(false)}
+        localEntries={localLog}
+        database={firebaseDb}
+        currentUser={currentUser}
+        onMigrationSuccess={(added, skipped) => {
+          showToast(`Migrated ${added} records to Firebase!`);
+        }}
+        onClearLocalData={() => {
+          localStorage.removeItem('power-report-v1');
+          setLocalLog([]);
+        }}
+        onToast={showToast}
       />
 
       {/* Global Toast Alert */}

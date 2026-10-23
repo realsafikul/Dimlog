@@ -1,4 +1,5 @@
 import React from 'react';
+import { User } from 'firebase/auth';
 import { 
   Sun, 
   Moon, 
@@ -10,6 +11,7 @@ import {
   Minimize2,
   SlidersHorizontal
 } from 'lucide-react';
+import { CloudStatusBadge } from './CloudStatusBadge';
 
 interface HeaderProps {
   currentTime: Date;
@@ -22,6 +24,12 @@ interface HeaderProps {
   onOpenSettings: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  currentUser: User | null;
+  isSyncing: boolean;
+  networkError: boolean;
+  onOpenAuth: () => void;
+  localEntriesCount: number;
+  onOpenMigration: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -35,6 +43,12 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   isFullscreen,
   onToggleFullscreen,
+  currentUser,
+  isSyncing,
+  networkError,
+  onOpenAuth,
+  localEntriesCount,
+  onOpenMigration,
 }) => {
   const formattedTime = currentTime.toLocaleTimeString('en-US', {
     hour: '2-digit',
@@ -85,6 +99,16 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Quick controls toolbar */}
         <div className="flex items-center gap-1 sm:gap-2">
+          {/* Cloud Status Indicator */}
+          <CloudStatusBadge
+            currentUser={currentUser}
+            isSyncing={isSyncing}
+            networkError={networkError}
+            onClick={onOpenAuth}
+            localEntriesCount={localEntriesCount}
+            onOpenMigration={onOpenMigration}
+          />
+
           {/* Add Manual Entry Button */}
           <button
             onClick={onOpenManualEntry}
