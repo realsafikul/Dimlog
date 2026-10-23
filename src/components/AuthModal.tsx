@@ -19,7 +19,7 @@ import {
   Database,
   Info
 } from 'lucide-react';
-import { getStoredApiKey, saveStoredApiKey, firebaseConfig } from '../firebase/config';
+import { getStoredApiKey, saveStoredApiKey, getApiKeySource, firebaseConfig } from '../firebase/config';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -209,18 +209,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="flex items-center gap-2">
                   <Key className="w-3.5 h-3.5 text-amber-500" />
                   <span>
-                    {getStoredApiKey() ? 'Firebase Web API Key (Configured ✓)' : 'Enter Firebase Web API Key'}
+                    {getApiKeySource() === 'env'
+                      ? 'Firebase Web API Key (Configured via Netlify Env ✓)'
+                      : getApiKeySource() === 'localStorage'
+                      ? 'Firebase Web API Key (Configured Locally ✓)'
+                      : 'Firebase Web API Key (Missing ⚠️)'}
                   </span>
                 </div>
-                <span className="text-[10px] text-indigo-500 uppercase">
+                <span className="text-[10px] text-indigo-500 uppercase font-semibold">
                   {showApiKeyConfig ? 'Hide' : 'Configure'}
                 </span>
               </button>
 
               {showApiKeyConfig && (
-                <div className="p-3 bg-white dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800 text-xs">
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2 leading-relaxed">
-                    Paste the <strong>Web API Key</strong> from your Firebase Console (Project Settings ➔ General ➔ Web API Key):
+                <div className="p-3 bg-white dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800 text-xs space-y-2">
+                  {getApiKeySource() === 'missing' && (
+                    <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
+                      <strong>Environment Variable Not Found:</strong> On Netlify, add <code>VITE_FIREBASE_API_KEY</code> under <em>Site configuration ➔ Environment variables</em>. Alternatively, paste it below for this browser session.
+                    </div>
+                  )}
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Firebase Console (Project Settings ➔ General ➔ Web API Key):
                   </p>
                   <form onSubmit={handleSaveApiKey} className="flex gap-2">
                     <input

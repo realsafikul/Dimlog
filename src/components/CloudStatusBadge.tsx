@@ -1,7 +1,7 @@
 import React from 'react';
 import { User } from 'firebase/auth';
-import { Cloud, CloudOff, RefreshCw, UserCheck, Key } from 'lucide-react';
-import { getStoredApiKey } from '../firebase/config';
+import { Cloud, CloudOff, RefreshCw, Key, AlertTriangle } from 'lucide-react';
+import { getStoredApiKey, getApiKeySource } from '../firebase/config';
 
 interface CloudStatusBadgeProps {
   currentUser: User | null;
@@ -20,7 +20,8 @@ export const CloudStatusBadge: React.FC<CloudStatusBadgeProps> = ({
   localEntriesCount,
   onOpenMigration,
 }) => {
-  const hasApiKey = !!getStoredApiKey();
+  const keySource = getApiKeySource();
+  const hasApiKey = keySource !== 'missing';
 
   return (
     <div className="flex items-center gap-1.5">
@@ -29,23 +30,27 @@ export const CloudStatusBadge: React.FC<CloudStatusBadgeProps> = ({
         onClick={onClick}
         type="button"
         className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition active:scale-95 shadow-xs ${
-          networkError
+          !hasApiKey
+            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/40'
+            : networkError
             ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
             : isSyncing
             ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
             : currentUser
             ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-            : hasApiKey
-            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30'
             : 'bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700'
         }`}
         title={
-          currentUser
-            ? `Connected to dimlog-d0f35 as ${currentUser.email}`
-            : 'Click to configure Firebase & sign in'
+          !hasApiKey
+            ? 'Firebase API Key is missing. Click to configure VITE_FIREBASE_API_KEY.'
+            : currentUser
+            ? `Connected to dimlog-d0f35 as ${currentUser.email} (${keySource === 'env' ? 'via Netlify env' : 'via stored key'})`
+            : 'Click to sign in with authorized staff account'
         }
       >
-        {isSyncing ? (
+        {!hasApiKey ? (
+          <Key className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+        ) : isSyncing ? (
           <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-500" />
         ) : networkError ? (
           <CloudOff className="w-3.5 h-3.5 text-rose-500" />
@@ -59,7 +64,9 @@ export const CloudStatusBadge: React.FC<CloudStatusBadgeProps> = ({
         )}
 
         <span className="hidden sm:inline">
-          {isSyncing
+          {!hasApiKey
+            ? 'Set API Key'
+            : isSyncing
             ? 'Syncing...'
             : networkError
             ? 'Cloud Error'
@@ -68,7 +75,11 @@ export const CloudStatusBadge: React.FC<CloudStatusBadgeProps> = ({
             : 'Local Mode'}
         </span>
         <span className="sm:hidden">
-          {currentUser ? 'Cloud' : 'Local'}
+          {!hasApiKey
+            ? 'API Key'
+            : currentUser
+            ? 'Cloud'
+            : 'Local'}
         </span>
       </button>
 
