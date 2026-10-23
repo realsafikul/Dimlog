@@ -314,7 +314,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Logged in as <span className="font-semibold text-slate-700 dark:text-slate-300">{currentUser?.email || SUPER_ADMIN_EMAIL}</span>
+                Logged in as <span className="font-semibold text-slate-700 dark:text-slate-300">{currentUser?.email || 'Super Admin'}</span>
               </p>
             </div>
           </div>

@@ -95,15 +95,20 @@ function AppContent() {
     }
   }, []);
 
-  // Sync theme with HTML root element
+  // Sync theme with HTML root and body element
   useEffect(() => {
     const root = document.documentElement;
+    const body = document.body;
     if (theme === 'dark') {
       root.classList.add('dark');
       root.classList.remove('light');
+      body?.classList.add('dark');
+      body?.classList.remove('light');
     } else {
       root.classList.add('light');
       root.classList.remove('dark');
+      body?.classList.add('light');
+      body?.classList.remove('dark');
     }
     localStorage.setItem('voltlog-theme', theme);
   }, [theme]);
@@ -440,18 +445,18 @@ function AppContent() {
   }, [log, outAt, currentTime, settings]);
 
   return (
-    <div className="min-h-screen bg-[#0a0d1c] dark:bg-[#0a0d1c] text-[#eef1ff] relative overflow-x-hidden transition-colors selection:bg-indigo-500/30 selection:text-indigo-200">
+    <div className="min-h-screen bg-slate-100 dark:bg-[#0a0d1c] text-slate-800 dark:text-[#eef1ff] relative overflow-x-hidden transition-colors duration-300 selection:bg-indigo-500/30 selection:text-indigo-200">
       {/* Ambient glowing blobs */}
-      <div className="fixed -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/25 blur-3xl pointer-events-none animate-blob-slow" />
-      <div className="fixed -bottom-32 -right-32 w-96 h-96 rounded-full bg-fuchsia-600/20 blur-3xl pointer-events-none animate-blob-reverse" />
+      <div className="fixed -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-500/10 dark:bg-indigo-600/25 blur-3xl pointer-events-none animate-blob-slow" />
+      <div className="fixed -bottom-32 -right-32 w-96 h-96 rounded-full bg-fuchsia-500/10 dark:bg-fuchsia-600/20 blur-3xl pointer-events-none animate-blob-reverse" />
 
       {/* Main Container */}
       <main className="relative z-10 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-28 md:pb-12 pt-safe pl-safe pr-safe">
         {/* Pending Approval Notice Banner for Logged In Pending Users */}
         {currentUser && !isApproved && (
-          <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-lg backdrop-blur-md animate-fade">
+          <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-lg backdrop-blur-md animate-fade">
             <div className="flex items-center gap-2.5">
-              <Clock className="w-5 h-5 text-amber-400 flex-none animate-pulse" />
+              <Clock className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-none animate-pulse" />
               <span>
                 <strong>Access Pending:</strong> Your account (@{userProfile?.username || currentUser.displayName}) is waiting for Super Admin approval. You can view all records in real time.
               </span>
@@ -461,8 +466,8 @@ function AppContent() {
 
         {/* Disabled Account Notice */}
         {currentUser && userProfile?.status === 'disabled' && (
-          <div className="mb-4 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs sm:text-sm flex items-center gap-2.5 shadow-lg backdrop-blur-md">
-            <ShieldAlert className="w-5 h-5 text-rose-400 flex-none" />
+          <div className="mb-4 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs sm:text-sm flex items-center gap-2.5 shadow-lg backdrop-blur-md">
+            <ShieldAlert className="w-5 h-5 text-rose-500 dark:text-rose-400 flex-none" />
             <span>
               Your account has been deactivated by the Super Admin. Please contact support if this was unexpected.
             </span>
@@ -471,14 +476,14 @@ function AppContent() {
 
         {/* Error Message Banner */}
         {errorMessage && (
-          <div className="mb-4 p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-lg backdrop-blur-md animate-fade">
+          <div className="mb-4 p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-800 dark:text-rose-300 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-lg backdrop-blur-md animate-fade">
             <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-rose-400 flex-none" />
+              <AlertCircle className="w-5 h-5 text-rose-500 dark:text-rose-400 flex-none" />
               <span>{errorMessage}</span>
             </div>
             <button
               onClick={() => setErrorMessage(null)}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-rose-300 hover:text-white hover:bg-rose-500/20 transition flex-none"
+              className="w-7 h-7 rounded-full flex items-center justify-center text-rose-600 dark:text-rose-300 hover:text-white hover:bg-rose-500/20 transition flex-none"
             >
               <X className="w-4 h-4" />
             </button>
@@ -514,9 +519,9 @@ function AppContent() {
 
         {/* Initial Loading Indicator */}
         {isInitialLoading && (
-          <div className="my-8 p-6 rounded-3xl bg-white/5 border border-slate-700/60 flex flex-col items-center justify-center gap-3 text-center backdrop-blur-md animate-pulse">
-            <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
-            <div className="text-sm font-semibold text-slate-300">
+          <div className="my-8 p-6 rounded-3xl bg-white/80 dark:bg-white/5 border border-slate-200 dark:border-slate-700/60 flex flex-col items-center justify-center gap-3 text-center backdrop-blur-md animate-pulse">
+            <Loader2 className="w-8 h-8 text-indigo-500 dark:text-indigo-400 animate-spin" />
+            <div className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               Connecting to Firebase Realtime Database &amp; syncing online power grid records...
             </div>
           </div>

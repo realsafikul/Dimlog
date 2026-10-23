@@ -1,0 +1,112 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Background Gradients -->
+    <linearGradient id="bg-grad" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#070a14"/>
+      <stop offset="50%" stop-color="#0a0d1c"/>
+      <stop offset="100%" stop-color="#121833"/>
+    </linearGradient>
+    <radialGradient id="indigo-glow" cx="200" cy="150" r="450" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="fuchsia-glow" cx="1050" cy="500" r="450" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#d946ef" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#d946ef" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="logo-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#d946ef"/>
+    </linearGradient>
+    <linearGradient id="brand-grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="50%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#f472b6"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#6366f1" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="1200" height="630" fill="url(#bg-grad)"/>
+  <rect width="1200" height="630" fill="url(#indigo-glow)"/>
+  <rect width="1200" height="630" fill="url(#fuchsia-glow)"/>
+
+  <!-- Subtle Grid Lines -->
+  <g opacity="0.07" stroke="#ffffff" stroke-width="1">
+    <line x1="0" y1="105" x2="1200" y2="105"/>
+    <line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="525" x2="1200" y2="525"/>
+    <line x1="240" y1="0" x2="240" y2="630"/>
+    <line x1="480" y1="0" x2="480" y2="630"/>
+    <line x1="720" y1="0" x2="720" y2="630"/>
+    <line x1="960" y1="0" x2="960" y2="630"/>
+  </g>
+
+  <!-- Content Container -->
+  <g transform="translate(100, 80)">
+    <!-- Top Creator Badge -->
+    <g>
+      <rect width="270" height="48" rx="24" fill="#ffffff" fill-opacity="0.08" stroke="#818cf8" stroke-opacity="0.3" stroke-width="1.5"/>
+      <!-- Brand Icon Mark -->
+      <circle cx="28" cy="24" r="14" fill="none" stroke="url(#brand-grad)" stroke-width="2"/>
+      <text x="28" y="29" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-weight="700" font-size="12" fill="url(#brand-grad)">SI</text>
+      <text x="56" y="29" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="14" fill="url(#brand-grad)">Safikul Islam</text>
+      <text x="180" y="29" font-family="system-ui, -apple-system, sans-serif" font-weight="600" font-size="11" letter-spacing="2" fill="#94a3b8">CREATOR</text>
+    </g>
+
+    <!-- Main VoltLog Logo & Identity -->
+    <g transform="translate(0, 85)">
+      <!-- App Icon Box with Glow -->
+      <rect width="104" height="104" rx="28" fill="url(#logo-grad)" filter="url(#shadow)"/>
+      <polygon points="58,16 30,58 50,58 44,88 74,44 54,44" fill="#fbbf24"/>
+
+      <!-- App Title -->
+      <text x="130" y="65" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="64" letter-spacing="-1" fill="#ffffff">VoltLog</text>
+      <text x="390" y="65" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="28" fill="#818cf8">•</text>
+      <text x="415" y="65" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="26" fill="#a5b4fc">24h Power Grid</text>
+
+      <!-- Description / Tagline -->
+      <text x="130" y="105" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="24" fill="#94a3b8">
+        One-Tap Electricity Outage Tracker &amp; Automated Generator Monitor
+      </text>
+    </g>
+
+    <!-- Feature Pillars Cards -->
+    <g transform="translate(0, 240)">
+      <!-- Card 1 -->
+      <g>
+        <rect width="310" height="120" rx="20" fill="#1e1b4b" fill-opacity="0.5" stroke="#4338ca" stroke-opacity="0.4" stroke-width="1.5"/>
+        <text x="24" y="44" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="18" fill="#38bdf8">⚡ Real-Time Tracking</text>
+        <text x="24" y="74" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14" fill="#cbd5e1">Instant one-tap power cut logger</text>
+        <text x="24" y="96" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14" fill="#94a3b8">with live generator detection.</text>
+      </g>
+
+      <!-- Card 2 -->
+      <g transform="translate(340, 0)">
+        <rect width="310" height="120" rx="20" fill="#1e1b4b" fill-opacity="0.5" stroke="#4338ca" stroke-opacity="0.4" stroke-width="1.5"/>
+        <text x="24" y="44" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="18" fill="#c084fc">📊 24-Hour Timeline</text>
+        <text x="24" y="74" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14" fill="#cbd5e1">Interactive visual timeline</text>
+        <text x="24" y="96" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14" fill="#94a3b8">of grid uptime and downtime.</text>
+      </g>
+
+      <!-- Card 3 -->
+      <g transform="translate(680, 0)">
+        <rect width="320" height="120" rx="20" fill="#1e1b4b" fill-opacity="0.5" stroke="#4338ca" stroke-opacity="0.4" stroke-width="1.5"/>
+        <text x="24" y="44" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="18" fill="#4ade80">🛡️ Multi-User Roles</text>
+        <text x="24" y="74" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14" fill="#cbd5e1">Super Admin, Editor &amp; View roles</text>
+        <text x="24" y="96" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14" fill="#94a3b8">with trash recovery &amp; CSV export.</text>
+      </g>
+    </g>
+
+    <!-- Bottom Status Bar -->
+    <g transform="translate(0, 395)">
+      <circle cx="10" cy="10" r="6" fill="#10b981"/>
+      <text x="26" y="15" font-family="system-ui, -apple-system, sans-serif" font-weight="600" font-size="15" fill="#10b981">Live Firebase Realtime Database Synced</text>
+      <text x="800" y="15" font-family="monospace" font-size="14" fill="#64748b">https://dimlog.netlify.app</text>
+    </g>
+  </g>
+</svg>

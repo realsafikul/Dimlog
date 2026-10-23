@@ -75,7 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center justify-between mb-3 px-2 sm:px-0 flex-wrap gap-2">
         {/* Creator Badge & Brand */}
         <div 
-          className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-white/10 dark:bg-slate-900/60 backdrop-blur-md border border-slate-300/40 dark:border-slate-800 shadow-sm transition hover:scale-[1.02]"
+          className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-white/80 dark:bg-slate-900/60 backdrop-blur-md border border-slate-300/80 dark:border-slate-800 shadow-sm transition hover:scale-[1.02]"
           title="Built by Safikul Islam"
         >
           <svg 
@@ -113,7 +113,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* User Status / Login Button */}
           {currentUser ? (
-            <div className="flex items-center gap-1.5 bg-white/10 dark:bg-slate-900/70 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-300/40 dark:border-slate-800 text-xs">
+            <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/70 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-300/80 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-200">
               {isAdmin ? (
                 <button
                   onClick={onOpenAdminPanel}

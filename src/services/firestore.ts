@@ -523,7 +523,7 @@ export async function ensureSuperAdminProfile(user: { uid: string; email: string
       await update(userRef, {
         uid: user.uid,
         email: user.email,
-        username: 'syssaltsync33',
+        username: existing?.username || 'admin',
         displayName: user.displayName || 'Super Admin',
         role: 'full',
         status: 'approved',

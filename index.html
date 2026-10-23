@@ -3,19 +3,108 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>VoltLog – Power Cut & Generator Monitor</title>
-    <meta name="description" content="One-tap electricity outage tracker, automated generator status logger, and interactive 24-hour power grid timeline optimized for mobile, tablet, and PC." />
+    
+    <!-- Title & SEO Meta Description -->
+    <title>VoltLog – Power Cut &amp; Generator Monitor</title>
+    <meta 
+      name="description" 
+      content="Track electricity outages with one tap, monitor automated generator runtime, and view real-time 24-hour power grid timelines on mobile, tablet, and PC." 
+    />
     <meta name="author" content="Safikul Islam" />
     <meta name="theme-color" content="#6366f1" />
-    <meta property="og:title" content="VoltLog – Power Cut & Generator Monitor" />
-    <meta property="og:description" content="One-tap electricity outage tracker, automated generator status logger, and interactive 24-hour power grid timeline optimized for mobile, tablet, and PC." />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="canonical" href="https://dimlog.netlify.app/" />
+
+    <!-- Google Fonts Preconnect & Display Swap for Zero Layout Shift -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link 
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" 
+      rel="stylesheet" 
+    />
+
+    <!-- Open Graph / Facebook / LinkedIn / WhatsApp Sharing Tags -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="VoltLog" />
+    <meta property="og:url" content="https://dimlog.netlify.app/" />
+    <meta property="og:title" content="VoltLog – Power Cut &amp; Generator Monitor" />
+    <meta 
+      property="og:description" 
+      content="Track electricity outages with one tap, monitor automated generator runtime, and view real-time 24-hour power grid timelines on mobile, tablet, and PC." 
+    />
+    <meta property="og:image" content="https://dimlog.netlify.app/og-image.svg" />
+    <meta property="og:image:type" content="image/svg+xml" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="VoltLog Electricity Outage and Generator Monitor Dashboard" />
+
+    <!-- Twitter / X Card Tags -->
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="twitter:site" content="@VoltLogApp" />
+    <meta name="twitter:creator" content="@safikulislam" />
+    <meta name="twitter:title" content="VoltLog – Power Cut &amp; Generator Monitor" />
+    <meta 
+      name="twitter:description" 
+      content="Track electricity outages with one tap, monitor automated generator runtime, and view real-time 24-hour power grid timelines on mobile, tablet, and PC." 
+    />
+    <meta name="twitter:image" content="https://dimlog.netlify.app/og-image.svg" />
+    <meta name="twitter:image:alt" content="VoltLog Electricity Outage and Generator Monitor Dashboard" />
+
+    <!-- Icons & PWA Manifest -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" width="64" height="64" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Schema.org JSON-LD Structured Data for Search Engines -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "VoltLog",
+      "alternateName": "VoltLog Power Cut & Generator Monitor",
+      "url": "https://dimlog.netlify.app/",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "All (Web, iOS, Android, macOS, Windows)",
+      "description": "One-tap electricity outage tracker, automated generator status logger, and interactive 24-hour power grid timeline optimized for mobile, tablet, and PC.",
+      "browserRequirements": "Requires JavaScript. Requires HTML5.",
+      "author": {
+        "@type": "Person",
+        "name": "Safikul Islam"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "One-tap electricity outage toggle",
+        "Automated generator runtime tracking",
+        "Real-time 24-hour power grid timeline chart",
+        "Shift report generator with WhatsApp and CSV export",
+        "Multi-user Role-Based Access Control (Admin, Editor, View)",
+        "Soft-delete with Trash recovery",
+        "Offline caching with Firebase Realtime Database sync"
+      ]
+    }
+    </script>
+    <!-- Prevent Flash of Wrong Theme on Load -->
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('voltlog-theme');
+          var isDark = saved ? saved === 'dark' : false;
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+          } else {
+            document.documentElement.classList.add('light');
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-[#0a0d1c] text-[#eef1ff] antialiased selection:bg-indigo-500/30 selection:text-indigo-200">
+  <body class="bg-slate-100 dark:bg-[#0a0d1c] text-slate-900 dark:text-[#eef1ff] antialiased selection:bg-indigo-500/30 selection:text-indigo-200 overflow-x-hidden min-h-screen transition-colors duration-300">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
