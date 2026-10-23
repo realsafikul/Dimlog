@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { LogEntry, AppSettings } from './types';
 import { 
+  loadStoredData,
+  saveStoredData,
   loadSettings, 
   saveSettings,
   getFullReportText,
@@ -91,49 +93,65 @@ export default function App() {
     localStorage.setItem('voltlog-theme', theme);
   }, [theme]);
 
-  // Real-time Firestore synchronization on mount (no login required)
+  // Load cached records immediately on 0ms so the user never waits
+  useEffect(() => {
+    const cached = loadStoredData();
+    if (cached.log && cached.log.length > 0) {
+      setLog(cached.log);
+      setOutAt(cached.outAt);
+    }
+  }, []);
+
+  // Real-time Cloud database synchronization on mount (no login required)
   useEffect(() => {
     setIsInitialLoading(true);
     let unsubStatus: (() => void) | undefined;
     let unsubLogs: (() => void) | undefined;
 
+    // Safety timeout: ensure loading state never blocks the UI
+    const safetyTimer = setTimeout(() => {
+      setIsInitialLoading(false);
+    }, 1200);
+
     try {
-      // 1. Live Firestore listener for power_status
+      // 1. Live listener for power_status
       unsubStatus = subscribeToPowerStatus(
         (statusDoc) => {
           setErrorMessage(null);
           if (statusDoc) {
             setOutAt(statusDoc.isOutage ? statusDoc.outAt : null);
-          } else {
-            setOutAt(null);
           }
         },
         (error) => {
-          console.error('[Firestore Error] Failed to fetch live power status:', error);
-          setErrorMessage(`Failed to load power status from Firestore: ${error.message}`);
+          console.error('[Firestore/Firebase Error] Failed to fetch live power status:', error);
         }
       );
 
-      // 2. Live Firestore listener for outage_logs
+      // 2. Live listener for outage_logs
       unsubLogs = subscribeToOutageLogs(
         (cloudLogs) => {
+          clearTimeout(safetyTimer);
           setIsInitialLoading(false);
           setErrorMessage(null);
-          setLog(cloudLogs);
+          if (cloudLogs) {
+            setLog(cloudLogs);
+            saveStoredData(cloudLogs, outAt);
+          }
         },
         (error) => {
-          console.error('[Firestore Error] Failed to fetch outage logs:', error);
+          console.error('[Firestore/Firebase Error] Failed to fetch outage logs:', error);
+          clearTimeout(safetyTimer);
           setIsInitialLoading(false);
-          setErrorMessage(`Failed to load outage logs from Firestore: ${error.message}`);
         }
       );
     } catch (err: any) {
-      console.error('[Firestore Error] Initialization failed:', err);
+      console.error('[Firestore/Firebase Error] Initialization failed:', err);
+      clearTimeout(safetyTimer);
       setIsInitialLoading(false);
-      setErrorMessage(err?.message || 'Failed to connect to Firebase Firestore.');
     }
 
     return () => {
+      clearTimeout(safetyTimer);
       if (unsubStatus) unsubStatus();
       if (unsubLogs) unsubLogs();
     };

@@ -1,16 +1,13 @@
 import { 
-  collection, 
-  doc, 
-  setDoc, 
-  addDoc, 
-  getDocs, 
-  updateDoc, 
-  deleteDoc, 
-  onSnapshot, 
-  query, 
-  orderBy,
-  writeBatch
-} from 'firebase/firestore';
+  ref, 
+  onValue, 
+  set, 
+  push, 
+  remove, 
+  update, 
+  get, 
+  Database 
+} from 'firebase/database';
 import { db } from '../firebase.js';
 import { LogEntry, AppSettings } from '../types';
 
@@ -28,26 +25,38 @@ export function subscribeToPowerStatus(
   onError?: (err: Error) => void
 ) {
   if (!db) {
-    console.error('[Firestore Error]: Firestore database instance is not initialized.');
-    if (onError) onError(new Error('Firestore is not initialized. Check your environment variables.'));
+    const err = new Error('Firebase database instance is not initialized.');
+    console.error('[Firestore Error]:', err);
+    if (onError) onError(err);
     return () => {};
   }
 
-  const statusDocRef = doc(db, 'power_status', 'current');
-  return onSnapshot(
-    statusDocRef,
-    (snapshot) => {
-      if (snapshot.exists()) {
-        onUpdate(snapshot.data() as PowerStatusDoc);
-      } else {
-        onUpdate(null);
+  try {
+    const statusRef = ref(db, 'power_status');
+    return onValue(
+      statusRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const val = snapshot.val();
+          onUpdate({
+            isOutage: !!val.isOutage,
+            outAt: typeof val.outAt === 'number' ? val.outAt : null,
+            updatedAt: Number(val.updatedAt) || Date.now(),
+          });
+        } else {
+          onUpdate(null);
+        }
+      },
+      (error) => {
+        console.error('[Firestore Error] subscribeToPowerStatus failed:', error);
+        if (onError) onError(error);
       }
-    },
-    (error) => {
-      console.error('[Firestore Error] subscribeToPowerStatus failed:', error);
-      if (onError) onError(error);
-    }
-  );
+    );
+  } catch (err: any) {
+    console.error('[Firestore Error] subscribeToPowerStatus exception:', err);
+    if (onError) onError(err);
+    return () => {};
+  }
 }
 
 /**
@@ -58,38 +67,52 @@ export function subscribeToOutageLogs(
   onError?: (err: Error) => void
 ) {
   if (!db) {
-    console.error('[Firestore Error]: Firestore database instance is not initialized.');
-    if (onError) onError(new Error('Firestore is not initialized. Check your environment variables.'));
+    const err = new Error('Firebase database instance is not initialized.');
+    console.error('[Firestore Error]:', err);
+    if (onError) onError(err);
     return () => {};
   }
 
-  const logsQuery = query(collection(db, 'outage_logs'), orderBy('ts', 'asc'));
-  return onSnapshot(
-    logsQuery,
-    (snapshot) => {
-      const items: LogEntry[] = [];
-      snapshot.forEach((d) => {
-        const data = d.data();
-        items.push({
-          id: d.id,
-          type: data.type === 'out' ? 'out' : 'in',
-          ts: Number(data.ts) || Date.now(),
-          note: data.note || undefined,
-        });
-      });
-      // Ensure sorted chronologically
-      items.sort((a, b) => a.ts - b.ts);
-      onUpdate(items);
-    },
-    (error) => {
-      console.error('[Firestore Error] subscribeToOutageLogs failed:', error);
-      if (onError) onError(error);
-    }
-  );
+  try {
+    const logsRef = ref(db, 'logs');
+    return onValue(
+      logsRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const items: LogEntry[] = [];
+          Object.keys(data).forEach((key) => {
+            const item = data[key];
+            if (item) {
+              items.push({
+                id: item.id || key,
+                type: item.type === 'out' ? 'out' : 'in',
+                ts: Number(item.ts) || Date.now(),
+                note: item.note || undefined,
+              });
+            }
+          });
+          // Sort chronologically
+          items.sort((a, b) => a.ts - b.ts);
+          onUpdate(items);
+        } else {
+          onUpdate([]);
+        }
+      },
+      (error) => {
+        console.error('[Firestore Error] subscribeToOutageLogs failed:', error);
+        if (onError) onError(error);
+      }
+    );
+  } catch (err: any) {
+    console.error('[Firestore Error] subscribeToOutageLogs exception:', err);
+    if (onError) onError(err);
+    return () => {};
+  }
 }
 
 /**
- * Toggle / record a power outage or restoration event directly in Firestore
+ * Toggle / record a power outage or restoration event directly in Firebase
  */
 export async function recordPowerEventFirestore(
   type: 'out' | 'in',
@@ -97,32 +120,34 @@ export async function recordPowerEventFirestore(
   note?: string
 ): Promise<string> {
   if (!db) {
-    const err = new Error('Firestore is not initialized. Check your environment variables.');
+    const err = new Error('Firebase database is not initialized.');
     console.error('[Firestore Error] recordPowerEventFirestore:', err);
     throw err;
   }
 
   try {
     const isOut = type === 'out';
-    const statusDocRef = doc(db, 'power_status', 'current');
-    const logsColRef = collection(db, 'outage_logs');
+    const logsRef = ref(db, 'logs');
+    const newDocRef = push(logsRef);
+    const entryId = newDocRef.key || `log-${ts}-${Date.now()}`;
 
-    // 1. Update the live power status document
-    await setDoc(statusDocRef, {
+    const updates: Record<string, any> = {};
+    updates['power_status'] = {
       isOutage: isOut,
       outAt: isOut ? ts : null,
       updatedAt: Date.now(),
-    });
-
-    // 2. Add new record to outage_logs collection
-    const newDoc = await addDoc(logsColRef, {
+      updatedBy: 'operator',
+    };
+    updates[`logs/${entryId}`] = {
+      id: entryId,
       type,
       ts,
       note: note || '',
       createdAt: Date.now(),
-    });
+    };
 
-    return newDoc.id;
+    await update(ref(db), updates);
+    return entryId;
   } catch (error: any) {
     console.error('[Firestore Error] Failed to record power event:', error);
     throw error;
@@ -137,38 +162,34 @@ export async function saveManualLogEntryFirestore(
   isLatest = false
 ): Promise<void> {
   if (!db) {
-    const err = new Error('Firestore is not initialized.');
+    const err = new Error('Firebase database is not initialized.');
     console.error('[Firestore Error] saveManualLogEntryFirestore:', err);
     throw err;
   }
 
   try {
-    if (entry.id && !entry.id.startsWith('entry-') && !entry.id.startsWith('manual-')) {
-      // Update existing document
-      const docRef = doc(db, 'outage_logs', entry.id);
-      await updateDoc(docRef, {
-        type: entry.type,
-        ts: entry.ts,
-        note: entry.note || '',
-        updatedAt: Date.now(),
-      });
-    } else {
-      // Add new document
-      await addDoc(collection(db, 'outage_logs'), {
-        type: entry.type,
-        ts: entry.ts,
-        note: entry.note || '',
-        createdAt: Date.now(),
-      });
-    }
+    const entryId = entry.id && !entry.id.startsWith('manual-')
+      ? entry.id
+      : (push(ref(db, 'logs')).key || `entry-${entry.ts}`);
+
+    const updates: Record<string, any> = {};
+    updates[`logs/${entryId}`] = {
+      id: entryId,
+      type: entry.type,
+      ts: entry.ts,
+      note: entry.note || '',
+      updatedAt: Date.now(),
+    };
 
     if (isLatest) {
-      await setDoc(doc(db, 'power_status', 'current'), {
+      updates['power_status'] = {
         isOutage: entry.type === 'out',
         outAt: entry.type === 'out' ? entry.ts : null,
         updatedAt: Date.now(),
-      });
+      };
     }
+
+    await update(ref(db), updates);
   } catch (error: any) {
     console.error('[Firestore Error] Failed to save manual log entry:', error);
     throw error;
@@ -176,30 +197,32 @@ export async function saveManualLogEntryFirestore(
 }
 
 /**
- * Delete a log entry from Firestore
+ * Delete a log entry from Firebase
  */
 export async function deleteLogEntryFirestore(
   docId: string,
   remainingLogs: LogEntry[]
 ): Promise<void> {
   if (!db) {
-    const err = new Error('Firestore is not initialized.');
+    const err = new Error('Firebase database is not initialized.');
     console.error('[Firestore Error] deleteLogEntryFirestore:', err);
     throw err;
   }
 
   try {
-    await deleteDoc(doc(db, 'outage_logs', docId));
+    const updates: Record<string, any> = {};
+    updates[`logs/${docId}`] = null;
 
-    // Update status if deleted item was the latest
     const sorted = remainingLogs.filter((e) => e.id !== docId).sort((a, b) => a.ts - b.ts);
     const last = sorted[sorted.length - 1];
 
-    await setDoc(doc(db, 'power_status', 'current'), {
+    updates['power_status'] = {
       isOutage: last ? last.type === 'out' : false,
       outAt: last && last.type === 'out' ? last.ts : null,
       updatedAt: Date.now(),
-    });
+    };
+
+    await update(ref(db), updates);
   } catch (error: any) {
     console.error('[Firestore Error] Failed to delete log entry:', error);
     throw error;
@@ -207,66 +230,27 @@ export async function deleteLogEntryFirestore(
 }
 
 /**
- * Clear all logs and reset power status in Firestore
+ * Clear all logs and reset power status in Firebase
  */
 export async function clearAllLogsFirestore(): Promise<void> {
   if (!db) {
-    const err = new Error('Firestore is not initialized.');
+    const err = new Error('Firebase database is not initialized.');
     console.error('[Firestore Error] clearAllLogsFirestore:', err);
     throw err;
   }
 
   try {
-    const snapshot = await getDocs(collection(db, 'outage_logs'));
-    const batch = writeBatch(db);
-
-    snapshot.docs.forEach((d) => {
-      batch.delete(d.ref);
-    });
-
-    // Reset status document
-    const statusRef = doc(db, 'power_status', 'current');
-    batch.set(statusRef, {
-      isOutage: false,
-      outAt: null,
-      updatedAt: Date.now(),
-    });
-
-    await batch.commit();
+    const updates: Record<string, any> = {
+      logs: null,
+      power_status: {
+        isOutage: false,
+        outAt: null,
+        updatedAt: Date.now(),
+      },
+    };
+    await update(ref(db), updates);
   } catch (error: any) {
     console.error('[Firestore Error] Failed to clear all logs:', error);
     throw error;
   }
-}
-
-/**
- * Save application settings to Firestore
- */
-export async function saveSettingsFirestore(settings: AppSettings): Promise<void> {
-  if (!db) return;
-  try {
-    await setDoc(doc(db, 'settings', 'app_settings'), settings, { merge: true });
-  } catch (error: any) {
-    console.error('[Firestore Error] Failed to save settings:', error);
-  }
-}
-
-/**
- * Real-time listener for app settings
- */
-export function subscribeToSettings(
-  onUpdate: (settings: AppSettings) => void
-) {
-  if (!db) return () => {};
-  return onSnapshot(
-    doc(db, 'settings', 'app_settings'),
-    (snapshot) => {
-      if (snapshot.exists()) {
-        onUpdate(snapshot.data() as AppSettings);
-      }
-    },
-    (error) => {
-      console.error('[Firestore Error] subscribeToSettings failed:', error);
-    }
-  );
 }
