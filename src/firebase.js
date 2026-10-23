@@ -4,6 +4,7 @@ import { getFirestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 const STORAGE_API_KEY = 'voltlog-firebase-api-key';
+export const DEFAULT_FIREBASE_API_KEY = 'AIzaSyA2U9TQPCUwj0X_fBqyEhHsf7rDd1QsjC0';
 
 export function getStoredApiKey() {
   // 1. Primary source: Vite environment variable (Netlify / .env)
@@ -12,7 +13,7 @@ export function getStoredApiKey() {
     return envKey.trim();
   }
 
-  // 2. Secondary fallback: Local storage (for client-side manual configuration)
+  // 2. Secondary fallback: Local storage (if manually updated)
   if (typeof window !== 'undefined') {
     const localKey = localStorage.getItem(STORAGE_API_KEY);
     if (localKey && localKey.trim().length > 0) {
@@ -20,7 +21,8 @@ export function getStoredApiKey() {
     }
   }
 
-  return '';
+  // 3. Guaranteed project Web API key
+  return DEFAULT_FIREBASE_API_KEY;
 }
 
 export function saveStoredApiKey(key) {
@@ -40,8 +42,8 @@ export const firebaseConfig = {
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'dimlog-d0f35.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'dimlog-d0f35',
   databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://dimlog-d0f35-default-rtdb.firebaseio.com/',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'dimlog-d0f35.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '1010607869915',
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:1010607869915:web:9bcfd6f5a74761a8dba1fe',
 };
 
@@ -61,14 +63,12 @@ try {
   // Active Realtime Database for dimlog-d0f35
   rtdb = getDatabase(app, firebaseConfig.databaseURL);
   
-  // Initialize Auth only if apiKey is present
-  if (currentApiKey) {
-    try {
-      auth = getAuth(app);
-      googleProvider = new GoogleAuthProvider();
-    } catch (authErr) {
-      console.warn('[Firebase Auth Init Warning]:', authErr);
-    }
+  // Initialize Auth & Google Provider
+  try {
+    auth = getAuth(app);
+    googleProvider = new GoogleAuthProvider();
+  } catch (authErr) {
+    console.warn('[Firebase Auth Init Warning]:', authErr);
   }
 
   // Optional Firestore instance if enabled in Google Cloud

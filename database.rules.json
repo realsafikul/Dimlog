@@ -30,7 +30,7 @@
       ".read": "auth != null && auth.token.email === 'syssaltsync33@gmail.com'",
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'syssaltsync33@gmail.com')",
-        ".write": "auth != null && (auth.token.email === 'syssaltsync33@gmail.com' || (auth.uid === $uid && !data.exists() && newData.child('role').val() === 'none' && newData.child('status').val() === 'pending'))"
+        ".write": "auth != null && (auth.token.email === 'syssaltsync33@gmail.com' || (auth.uid === $uid && (!data.exists() || data.child('status').val() === 'pending') && newData.child('status').val() === 'pending' && newData.child('role').val() === 'none'))"
       }
     }
   }

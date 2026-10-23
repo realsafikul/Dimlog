@@ -77,10 +77,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (user) {
           // If super admin email, auto ensure admin permissions
-          if (user.email === SUPER_ADMIN_EMAIL) {
+          const isSuper = (user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+          if (isSuper) {
             await ensureSuperAdminProfile({
               uid: user.uid,
-              email: user.email,
+              email: user.email || SUPER_ADMIN_EMAIL,
               displayName: user.displayName,
             });
           }
@@ -115,7 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Compute permission flags
   const isAdmin = useMemo(() => {
-    return currentUser?.email === SUPER_ADMIN_EMAIL;
+    return (currentUser?.email || '').toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
   }, [currentUser]);
 
   const isApproved = useMemo(() => {
@@ -162,7 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Sign in with username + password
   const loginWithUsername = async (username: string, pass: string) => {
     if (!auth) {
-      throw new Error('Firebase Web API Key is missing. Please enter your Firebase API key in the field below or configure VITE_FIREBASE_API_KEY in Netlify.');
+      throw new Error('Authentication is currently initializing. Please try again.');
     }
     const cleaned = cleanUsername(username);
     if (!cleaned) throw new Error('Please enter a valid username (letters, numbers, underscore).');
@@ -183,7 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Request Access / Sign up with username + password
   const signupWithUsername = async (username: string, pass: string) => {
     if (!auth) {
-      throw new Error('Firebase Web API Key is missing. Please enter your Firebase API key in the field below or configure VITE_FIREBASE_API_KEY in Netlify.');
+      throw new Error('Authentication is currently initializing. Please try again.');
     }
     const cleaned = cleanUsername(username);
     if (!cleaned || cleaned.length < 3) {
@@ -216,14 +217,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Super Admin sign in with Google
   const loginWithGoogle = async () => {
     if (!auth || !googleProvider) {
-      throw new Error('Firebase Web API Key is missing. Please enter your Firebase Web API Key in the field below or configure VITE_FIREBASE_API_KEY in Netlify.');
+      throw new Error('Google Authentication is initializing. Please try again.');
     }
     try {
       const res = await signInWithPopup(auth, googleProvider);
-      if (res.user.email === SUPER_ADMIN_EMAIL) {
+      if ((res.user.email || '').toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
         await ensureSuperAdminProfile({
           uid: res.user.uid,
-          email: res.user.email,
+          email: res.user.email || SUPER_ADMIN_EMAIL,
           displayName: res.user.displayName,
         });
       }
