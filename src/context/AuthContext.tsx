@@ -8,7 +8,7 @@ import {
   signOut, 
   updateProfile 
 } from 'firebase/auth';
-import { auth, googleProvider, createSecondaryAuth } from '../firebase.js';
+import { auth, googleProvider, createSecondaryAuth, getStoredApiKey, saveStoredApiKey } from '../firebase.js';
 import { 
   UserProfile, 
   UserRole, 
@@ -32,6 +32,7 @@ interface AuthContextType {
   isApproved: boolean;
   userRole: UserRole;
   canCreate: boolean;
+  isApiKeyConfigured: boolean;
   canEditEntry: (entry: LogEntry) => boolean;
   canDeleteEntry: (entry: LogEntry) => boolean;
   loginWithUsername: (username: string, pass: string) => Promise<void>;
@@ -39,6 +40,7 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   adminCreateUser: (username: string, pass: string, role: UserRole) => Promise<void>;
+  updateApiKey: (key: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -55,6 +57,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loadingAuth, setLoadingAuth] = useState<boolean>(true);
+  const [apiKey, setApiKey] = useState<string>(getStoredApiKey);
+
+  const isApiKeyConfigured = useMemo(() => {
+    return apiKey.trim().length > 0 && !!auth;
+  }, [apiKey]);
 
   // Monitor auth state changes
   useEffect(() => {
@@ -146,15 +153,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (userRole === 'full') return true;
     if (userRole === 'editor') {
       // Editors can delete ONLY what they created themselves.
-      // Legacy records without createdBy can only be deleted by admin!
+      // Legacy records without createdBy can only be edited by admin!
       return !!entry.createdBy && entry.createdBy === currentUser?.uid;
     }
     return false;
   };
 
-  // Sign in with username + password (no email shown to user)
+  // Sign in with username + password
   const loginWithUsername = async (username: string, pass: string) => {
-    if (!auth) throw new Error('Firebase Auth is not available.');
+    if (!auth) {
+      throw new Error('Firebase Web API Key is missing. Please enter your Firebase API key in the field below or configure VITE_FIREBASE_API_KEY in Netlify.');
+    }
     const cleaned = cleanUsername(username);
     if (!cleaned) throw new Error('Please enter a valid username (letters, numbers, underscore).');
     if (!pass || pass.length < 6) throw new Error('Password must be at least 6 characters.');
@@ -173,7 +182,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Request Access / Sign up with username + password
   const signupWithUsername = async (username: string, pass: string) => {
-    if (!auth) throw new Error('Firebase Auth is not available.');
+    if (!auth) {
+      throw new Error('Firebase Web API Key is missing. Please enter your Firebase API key in the field below or configure VITE_FIREBASE_API_KEY in Netlify.');
+    }
     const cleaned = cleanUsername(username);
     if (!cleaned || cleaned.length < 3) {
       throw new Error('Username must be at least 3 characters (letters, numbers, underscore).');
@@ -204,7 +215,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Super Admin sign in with Google
   const loginWithGoogle = async () => {
-    if (!auth || !googleProvider) throw new Error('Google Auth is not available.');
+    if (!auth || !googleProvider) {
+      throw new Error('Firebase Web API Key is missing. Please enter your Firebase Web API Key in the field below or configure VITE_FIREBASE_API_KEY in Netlify.');
+    }
     try {
       const res = await signInWithPopup(auth, googleProvider);
       if (res.user.email === SUPER_ADMIN_EMAIL) {
@@ -216,6 +229,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (err: any) {
       console.error('[Auth Error] loginWithGoogle failed:', err);
+      if (err.code === 'auth/popup-closed-by-user') {
+        throw new Error('Google sign-in popup was closed.');
+      }
+      if (err.code === 'auth/unauthorized-domain') {
+        throw new Error('This domain is not authorized in Firebase Console. Add this domain to Authentication -> Settings -> Authorized domains.');
+      }
       throw err;
     }
   };
@@ -271,6 +290,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateApiKey = (newKey: string) => {
+    saveStoredApiKey(newKey);
+    setApiKey(newKey);
+    // Reload page to re-initialize Firebase with fresh API key
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -281,6 +309,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isApproved,
         userRole,
         canCreate,
+        isApiKeyConfigured,
         canEditEntry,
         canDeleteEntry,
         loginWithUsername,
@@ -288,6 +317,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle,
         logout,
         adminCreateUser,
+        updateApiKey,
       }}
     >
       {children}

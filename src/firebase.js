@@ -3,9 +3,40 @@ import { getDatabase } from 'firebase/database';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
-// Read Firebase configuration from Vite environment variables without hardcoding
+const STORAGE_API_KEY = 'voltlog-firebase-api-key';
+
+export function getStoredApiKey() {
+  // 1. Primary source: Vite environment variable (Netlify / .env)
+  const envKey = import.meta.env.VITE_FIREBASE_API_KEY;
+  if (typeof envKey === 'string' && envKey.trim().length > 0) {
+    return envKey.trim();
+  }
+
+  // 2. Secondary fallback: Local storage (for client-side manual configuration)
+  if (typeof window !== 'undefined') {
+    const localKey = localStorage.getItem(STORAGE_API_KEY);
+    if (localKey && localKey.trim().length > 0) {
+      return localKey.trim();
+    }
+  }
+
+  return '';
+}
+
+export function saveStoredApiKey(key) {
+  if (typeof window === 'undefined') return;
+  if (key && key.trim().length > 0) {
+    localStorage.setItem(STORAGE_API_KEY, key.trim());
+  } else {
+    localStorage.removeItem(STORAGE_API_KEY);
+  }
+}
+
+const currentApiKey = getStoredApiKey();
+
+// Read Firebase configuration from Vite environment variables or stored key
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  apiKey: currentApiKey,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'dimlog-d0f35.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'dimlog-d0f35',
   databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://dimlog-d0f35-default-rtdb.firebaseio.com/',
@@ -30,9 +61,15 @@ try {
   // Active Realtime Database for dimlog-d0f35
   rtdb = getDatabase(app, firebaseConfig.databaseURL);
   
-  // Initialize Auth
-  auth = getAuth(app);
-  googleProvider = new GoogleAuthProvider();
+  // Initialize Auth only if apiKey is present
+  if (currentApiKey) {
+    try {
+      auth = getAuth(app);
+      googleProvider = new GoogleAuthProvider();
+    } catch (authErr) {
+      console.warn('[Firebase Auth Init Warning]:', authErr);
+    }
+  }
 
   // Optional Firestore instance if enabled in Google Cloud
   try {
@@ -49,8 +86,10 @@ try {
  * without signing out the currently logged in admin.
  */
 export function createSecondaryAuth() {
+  const apiKey = getStoredApiKey();
+  const config = { ...firebaseConfig, apiKey };
   const secondaryAppName = `secondary-auth-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+  const secondaryApp = initializeApp(config, secondaryAppName);
   const secondaryAuth = getAuth(secondaryApp);
   return {
     secondaryApp,
@@ -67,4 +106,3 @@ export function createSecondaryAuth() {
 
 export { app, rtdb as db, rtdb, firestore, auth, googleProvider };
 export default rtdb;
-

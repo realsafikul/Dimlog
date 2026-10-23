@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { X, LogIn, UserPlus, Lock, User, AlertCircle, Loader2, ShieldCheck, Sparkles } from 'lucide-react';
+import { X, LogIn, UserPlus, Lock, User, AlertCircle, Loader2, ShieldCheck, Sparkles, Key, Check } from 'lucide-react';
+import { getStoredApiKey } from '../firebase.js';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -15,7 +16,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onToast,
   defaultTab = 'login',
 }) => {
-  const { loginWithUsername, signupWithUsername, loginWithGoogle } = useAuth();
+  const { loginWithUsername, signupWithUsername, loginWithGoogle, isApiKeyConfigured, updateApiKey } = useAuth();
   const [tab, setTab] = useState<'login' | 'signup'>(defaultTab);
 
   // Form states
@@ -23,6 +24,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Manual API Key input state
+  const [manualKey, setManualKey] = useState(getStoredApiKey);
+  const [showKeyInput, setShowKeyInput] = useState(!isApiKeyConfigured);
 
   if (!isOpen) return null;
 
@@ -77,6 +82,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const handleSaveApiKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualKey.trim()) {
+      setError('Please enter a valid Firebase API Key.');
+      return;
+    }
+    updateApiKey(manualKey.trim());
+    onToast('Firebase API Key saved! Connecting...');
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade">
       <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden p-6 text-slate-900 dark:text-slate-100 max-h-[95vh] overflow-y-auto">
@@ -102,6 +117,37 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* API Key Missing Notice / Input Prompt */}
+        {!isApiKeyConfigured && (
+          <div className="my-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 space-y-3">
+            <div className="flex items-center gap-2">
+              <Key className="w-4 h-4 text-amber-500 flex-none" />
+              <div className="text-xs font-bold">Firebase Web API Key Required</div>
+            </div>
+            <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+              Firebase Authentication (Google &amp; User accounts) requires your project&apos;s Web API Key.
+              Find it in <strong>Firebase Console → Project Settings → Web API Key</strong> (starts with <code>AIzaSy...</code>).
+            </p>
+
+            <form onSubmit={handleSaveApiKey} className="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                required
+                value={manualKey}
+                onChange={(e) => setManualKey(e.target.value)}
+                placeholder="AIzaSy..."
+                className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-800 border border-amber-500/40 font-mono text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+              <button
+                type="submit"
+                className="px-3 py-1.5 rounded-xl font-bold text-xs bg-amber-600 hover:bg-amber-500 text-white transition active:scale-95 shadow-sm"
+              >
+                Connect
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl my-4 text-xs font-semibold">
