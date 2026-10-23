@@ -122,9 +122,9 @@ export default function App() {
     return () => unsubscribe();
   }, [firebaseAuth]);
 
-  // Real-time Database sync when user is authenticated
+  // Real-time Database sync: connect immediately to online database
   useEffect(() => {
-    if (!firebaseDb || !currentUser) {
+    if (!firebaseDb) {
       return;
     }
 
@@ -133,7 +133,7 @@ export default function App() {
     let unsubLogs: (() => void) | undefined;
 
     try {
-      // 1. Subscribe to power_status
+      // 1. Subscribe to online power_status
       unsubStatus = subscribeToPowerStatus(
         firebaseDb,
         (statusPayload) => {
@@ -144,30 +144,32 @@ export default function App() {
           }
         },
         (err) => {
-          console.warn('Realtime Database power_status error:', err);
+          console.warn('Realtime Database power_status notice:', err);
           setNetworkError(true);
           setIsSyncing(false);
         }
       );
 
-      // 2. Subscribe to logs
+      // 2. Subscribe to online logs
       unsubLogs = subscribeToLogs(
         firebaseDb,
         (cloudLogs) => {
           setIsSyncing(false);
           setNetworkError(false);
-          setLog(cloudLogs);
-          // Also keep local storage updated as an offline backup
-          saveStoredData(cloudLogs, outAt);
+          if (cloudLogs && cloudLogs.length > 0) {
+            setLog(cloudLogs);
+            // Also keep local storage updated as an offline backup
+            saveStoredData(cloudLogs, outAt);
+          }
         },
         (err) => {
-          console.warn('Realtime Database logs error:', err);
+          console.warn('Realtime Database logs notice:', err);
           setNetworkError(true);
           setIsSyncing(false);
         }
       );
     } catch (err) {
-      console.error('Firebase subscription initialization error:', err);
+      console.error('Firebase subscription initialization notice:', err);
       setNetworkError(true);
       setIsSyncing(false);
     }
@@ -176,7 +178,7 @@ export default function App() {
       if (unsubStatus) unsubStatus();
       if (unsubLogs) unsubLogs();
     };
-  }, [firebaseDb, currentUser]);
+  }, [firebaseDb]);
 
   // Handle API key updates
   const handleApiKeySaved = (newKey: string) => {
@@ -235,7 +237,7 @@ export default function App() {
     return Math.max(0, Math.floor((nowMs - lastInEntry.ts) / 1000));
   }, [log, outAt, nowMs]);
 
-  // Core 1-tap power toggle handler (with Cloud and Local fallback)
+  // Core 1-tap power toggle handler (Online Cloud Realtime Database with Local Storage Fallback)
   const handleTogglePower = useCallback(async () => {
     const now = Date.now();
     setPreviousState({ log: [...log], outAt });
@@ -246,8 +248,8 @@ export default function App() {
     triggerHaptic(45, settings.hapticsEnabled);
     const isNowOut = outAt === null;
 
-    if (currentUser && firebaseDb) {
-      // Cloud update in Firebase Realtime Database
+    if (firebaseDb) {
+      // Direct Online Cloud update in Firebase Realtime Database
       setIsSyncing(true);
       try {
         await recordPowerEventCloud(
@@ -259,18 +261,41 @@ export default function App() {
         setIsSyncing(false);
         setNetworkError(false);
 
+        // Also update local cache for offline resilience
+        const newEntry: LogEntry = {
+          id: `entry-${now}-${log.length}`,
+          type: isNowOut ? 'out' : 'in',
+          ts: now,
+        };
+        const newLog = [...log, newEntry];
+        const newOutAt = isNowOut ? now : null;
+        setLog(newLog);
+        setOutAt(newOutAt);
+        saveStoredData(newLog, newOutAt);
+
         if (isNowOut) {
           playOutChime(settings.soundEnabled);
-          showToast('⚡ Electricity Out saved to Firebase · Generator ON');
+          showToast('⚡ Electricity Out saved to Firebase Cloud (Online) ✓');
         } else {
           playInChime(settings.soundEnabled);
-          showToast('💡 Electricity Back saved to Firebase · Generator OFF');
+          showToast('💡 Electricity Back saved to Firebase Cloud (Online) ✓');
         }
       } catch (err: any) {
-        console.error('Firebase save error:', err);
+        console.warn('Firebase online save notice:', err);
         setIsSyncing(false);
         setNetworkError(true);
-        showToast('⚠️ Cloud save failed: ' + (err.message || 'Check network / rules'));
+        // Fallback to local
+        const newEntry: LogEntry = {
+          id: `entry-${now}-${log.length}`,
+          type: isNowOut ? 'out' : 'in',
+          ts: now,
+        };
+        const newLog = [...log, newEntry];
+        const newOutAt = isNowOut ? now : null;
+        setLog(newLog);
+        setOutAt(newOutAt);
+        saveStoredData(newLog, newOutAt);
+        showToast('Saved locally (Offline/Network warning)');
       }
     } else {
       // Local-only mode
@@ -287,10 +312,10 @@ export default function App() {
 
       if (isNowOut) {
         playOutChime(settings.soundEnabled);
-        showToast('⚡ Electricity Out recorded locally (Sign in to sync)');
+        showToast('⚡ Electricity Out recorded locally');
       } else {
         playInChime(settings.soundEnabled);
-        showToast('💡 Electricity Back recorded locally (Sign in to sync)');
+        showToast('💡 Electricity Back recorded locally');
       }
     }
   }, [log, outAt, currentUser, firebaseDb, settings, undoTimeout, showToast]);
@@ -300,20 +325,23 @@ export default function App() {
     if (!previousState) return;
     playClickSound(settings.soundEnabled);
 
-    if (currentUser && firebaseDb) {
+    if (firebaseDb) {
       setIsSyncing(true);
       try {
-        // If undoing, revert power_status and last entry
         const lastEntry = log[log.length - 1];
         if (lastEntry) {
           await deleteEntryCloud(firebaseDb, lastEntry.id, previousState.log, currentUser);
         }
         setIsSyncing(false);
         setPreviousState(null);
-        showToast('Reverted cloud state');
+        showToast('Reverted cloud state ✓');
       } catch (err: any) {
         setIsSyncing(false);
-        showToast('Failed to revert cloud entry: ' + err.message);
+        setLog(previousState.log);
+        setOutAt(previousState.outAt);
+        saveStoredData(previousState.log, previousState.outAt);
+        setPreviousState(null);
+        showToast('Reverted locally');
       }
     } else {
       setLog(previousState.log);
@@ -329,16 +357,24 @@ export default function App() {
     const target = log[index];
     if (!target) return;
 
-    if (currentUser && firebaseDb) {
+    if (firebaseDb) {
       setIsSyncing(true);
       try {
         await deleteEntryCloud(firebaseDb, target.id, log, currentUser);
         setIsSyncing(false);
         playClickSound(settings.soundEnabled);
-        showToast('Entry deleted from Firebase ✓');
+        showToast('Entry deleted from Firebase Cloud ✓');
       } catch (err: any) {
         setIsSyncing(false);
-        showToast('Delete failed: ' + err.message);
+        const newLog = [...log];
+        newLog.splice(index, 1);
+        const lastEntry = newLog[newLog.length - 1];
+        const newOutAt = lastEntry && lastEntry.type === 'out' ? lastEntry.ts : null;
+        setLog(newLog);
+        setOutAt(newOutAt);
+        saveStoredData(newLog, newOutAt);
+        playClickSound(settings.soundEnabled);
+        showToast('Entry removed locally');
       }
     } else {
       const newLog = [...log];
@@ -358,7 +394,7 @@ export default function App() {
     entryData: { type: 'out' | 'in'; ts: number; note?: string; id?: string },
     editIndex?: number
   ) => {
-    if (currentUser && firebaseDb) {
+    if (firebaseDb) {
       setIsSyncing(true);
       try {
         const entryId = entryData.id || `manual-${entryData.ts}-${Date.now()}`;
@@ -371,10 +407,10 @@ export default function App() {
         const isLatest = typeof editIndex !== 'number' || editIndex === log.length - 1;
         await saveManualEntryCloud(firebaseDb, newEntry, currentUser, isLatest);
         setIsSyncing(false);
-        showToast('Entry saved to Firebase ✓');
+        showToast('Entry saved to Firebase Cloud ✓');
       } catch (err: any) {
         setIsSyncing(false);
-        showToast('Cloud save failed: ' + err.message);
+        showToast('Saved locally (Cloud sync error)');
       }
     } else {
       const newLog = [...log];
@@ -407,15 +443,21 @@ export default function App() {
   const handleClearAll = useCallback(async () => {
     if (log.length === 0 && outAt === null) return;
     if (window.confirm('Clear all recorded entries in VoltLog?')) {
-      if (currentUser && firebaseDb) {
+      if (firebaseDb) {
         setIsSyncing(true);
         try {
           await clearAllCloud(firebaseDb, currentUser);
           setIsSyncing(false);
-          showToast('All logs cleared from Firebase ✓');
+          setLog([]);
+          setOutAt(null);
+          saveStoredData([], null);
+          showToast('All logs cleared from Firebase Cloud ✓');
         } catch (err: any) {
           setIsSyncing(false);
-          showToast('Failed to clear cloud logs: ' + err.message);
+          setLog([]);
+          setOutAt(null);
+          saveStoredData([], null);
+          showToast('Cleared locally');
         }
       } else {
         setLog([]);

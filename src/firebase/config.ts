@@ -4,12 +4,6 @@ import { getAuth } from 'firebase/auth';
 
 const STORAGE_API_KEY = 'voltlog-firebase-api-key';
 
-/**
- * Retrieves the Firebase API Key:
- * 1. Checks Vite environment variable (import.meta.env.VITE_FIREBASE_API_KEY)
- * 2. Checks browser localStorage fallback ('voltlog-firebase-api-key')
- * Returns empty string if not configured.
- */
 export function getStoredApiKey(): string {
   // 1. Primary source: Vite environment variable (Netlify / .env)
   const envKey = import.meta.env.VITE_FIREBASE_API_KEY;
@@ -73,29 +67,22 @@ export interface FirebaseInitResult {
 
 /**
  * Initializes Firebase App, Auth, and Realtime Database.
- * Validates that API key is present before attempting initialization.
- * Will NOT initialize with an undefined or empty API key.
+ * Realtime Database always connects to https://dimlog-d0f35-default-rtdb.firebaseio.com/
+ * so cloud synchronization is active immediately!
  */
 export function initFirebase(customApiKey?: string): FirebaseInitResult {
   const currentKey = (customApiKey || getStoredApiKey()).trim();
 
-  // If no API key is provided, do NOT initialize with empty/undefined credentials
-  if (!currentKey) {
-    const errorMsg = 'Firebase Web API Key is missing. Set VITE_FIREBASE_API_KEY in Netlify or configure it in Cloud Settings.';
-    console.warn(`[VoltLog Firebase] ${errorMsg}`);
-    return {
-      app: null,
-      auth: null,
-      db: null,
-      isConfigured: false,
-      error: errorMsg,
-    };
-  }
-
-  const config = {
-    ...firebaseConfig,
-    apiKey: currentKey,
+  const config: Record<string, string> = {
+    projectId: firebaseConfig.projectId,
+    databaseURL: firebaseConfig.databaseURL,
+    authDomain: firebaseConfig.authDomain,
+    appId: firebaseConfig.appId,
   };
+
+  if (currentKey) {
+    config.apiKey = currentKey;
+  }
 
   try {
     if (!getApps().length) {
@@ -104,8 +91,12 @@ export function initFirebase(customApiKey?: string): FirebaseInitResult {
       appInstance = getApp();
     }
 
-    authInstance = getAuth(appInstance);
-    dbInstance = getDatabase(appInstance, config.databaseURL);
+    if (currentKey) {
+      authInstance = getAuth(appInstance);
+    }
+
+    // Always connect Realtime Database to the designated URL
+    dbInstance = getDatabase(appInstance, firebaseConfig.databaseURL);
 
     return {
       app: appInstance,
@@ -115,14 +106,13 @@ export function initFirebase(customApiKey?: string): FirebaseInitResult {
       error: null,
     };
   } catch (err: any) {
-    const errorMsg = err?.message || 'Failed to initialize Firebase with current credentials.';
     console.error('[VoltLog Firebase Error]', err);
     return {
       app: null,
       auth: null,
       db: null,
       isConfigured: false,
-      error: errorMsg,
+      error: err?.message || 'Failed to initialize Firebase',
     };
   }
 }
