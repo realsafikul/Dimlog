@@ -29,6 +29,7 @@ import { WorkflowGuide } from './components/WorkflowGuide';
 import { FloatingMobileBar } from './components/FloatingMobileBar';
 import { AuthModal } from './components/AuthModal';
 import { AdminPanel } from './components/AdminPanel';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Flame, Loader2, AlertCircle, Clock, X, ShieldAlert } from 'lucide-react';
 
 function AppContent() {
@@ -731,8 +732,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

@@ -30,8 +30,10 @@ export const ManualEntryModal: React.FC<ManualEntryModalProps> = ({
   const [dateStr, setDateStr] = useState<string>('');
   const [timeStr, setTimeStr] = useState<string>('');
   const [note, setNote] = useState<string>('');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
+    setValidationError(null);
     if (editingEntry) {
       setType(editingEntry.entry.type);
       const d = new Date(editingEntry.entry.ts);
@@ -55,12 +57,28 @@ export const ManualEntryModal: React.FC<ManualEntryModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!dateStr || !timeStr) return;
+    setValidationError(null);
+
+    if (!dateStr || !timeStr) {
+      setValidationError('Please specify both date and time.');
+      return;
+    }
 
     const [year, month, day] = dateStr.split('-').map(Number);
     const [hours, mins] = timeStr.split(':').map(Number);
     const dateObj = new Date(year, month - 1, day, hours, mins, 0, 0);
     const ts = dateObj.getTime();
+
+    if (isNaN(ts)) {
+      setValidationError('Invalid date or time entered.');
+      return;
+    }
+
+    // Protect against future timestamps beyond 5 minutes
+    if (ts > Date.now() + 5 * 60 * 1000) {
+      setValidationError('Outage time cannot be recorded in the future.');
+      return;
+    }
 
     onSave(
       {
@@ -106,6 +124,12 @@ export const ManualEntryModal: React.FC<ManualEntryModalProps> = ({
             <span>
               Recorded originally by: <strong className="text-slate-700 dark:text-slate-300">{editingEntry.entry.createdByName || 'Legacy / Unknown'}</strong>
             </span>
+          </div>
+        )}
+
+        {validationError && (
+          <div className="mt-3 p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-300 text-xs font-semibold">
+            {validationError}
           </div>
         )}
 
