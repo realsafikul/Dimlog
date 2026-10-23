@@ -18,21 +18,22 @@ import {
   Filter, 
   Search, 
   Edit3, 
-  Zap, 
   ZapOff,
   Sparkles,
-  Layers,
-  ChevronDown
+  ChevronDown,
+  User,
+  Lock
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface ReportLogProps {
   log: LogEntry[];
   outAt: number | null;
   onDeleteEntry: (index: number) => void;
   onEditEntry: (entry: LogEntry, index: number) => void;
-  onClearAll: () => void;
   onToast: (msg: string) => void;
   onAddSampleData?: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const ReportLog: React.FC<ReportLogProps> = ({
@@ -40,10 +41,11 @@ export const ReportLog: React.FC<ReportLogProps> = ({
   outAt,
   onDeleteEntry,
   onEditEntry,
-  onClearAll,
   onToast,
   onAddSampleData,
+  onOpenAuth,
 }) => {
+  const { currentUser, canEditEntry, canDeleteEntry, canCreate } = useAuth();
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
   const [copiedWhatsApp, setCopiedWhatsApp] = useState(false);
@@ -75,8 +77,9 @@ export const ReportLog: React.FC<ReportLogProps> = ({
           const timeStr = fmtTime(entry.ts).toLowerCase();
           const dateStr = fmtDateShort(entry.ts).toLowerCase();
           const noteStr = (entry.note || '').toLowerCase();
+          const creatorStr = (entry.createdByName || 'legacy unknown').toLowerCase();
           const typeStr = entry.type === 'out' ? 'electricity out generator on' : 'electricity back generator off';
-          if (!timeStr.includes(q) && !dateStr.includes(q) && !noteStr.includes(q) && !typeStr.includes(q)) {
+          if (!timeStr.includes(q) && !dateStr.includes(q) && !noteStr.includes(q) && !typeStr.includes(q) && !creatorStr.includes(q)) {
             return false;
           }
         }
@@ -97,7 +100,6 @@ export const ReportLog: React.FC<ReportLogProps> = ({
         onDone();
       },
       () => {
-        // Fallback for older browsers
         const textarea = document.createElement('textarea');
         textarea.value = text;
         textarea.style.position = 'fixed';
@@ -151,7 +153,7 @@ export const ReportLog: React.FC<ReportLogProps> = ({
             </span>
           </div>
 
-          {/* Quick Filter Buttons (Segmented Controls) */}
+          {/* Quick Filter Buttons */}
           <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-medium">
             <button
               onClick={() => setFilterDate('all')}
@@ -194,7 +196,7 @@ export const ReportLog: React.FC<ReportLogProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter by time, date, note..."
+              placeholder="Filter by time, date, note, creator..."
               className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
             />
           </div>
@@ -223,7 +225,7 @@ export const ReportLog: React.FC<ReportLogProps> = ({
               </p>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-xs">
                 {log.length === 0 
-                  ? 'Tap the red Electricity Out button when power cuts to create your first report.'
+                  ? 'Authorized operators can tap Electricity Out to create the first record.'
                   : 'Try clearing the search query or resetting filters.'}
               </p>
               {log.length === 0 && onAddSampleData && (
@@ -240,6 +242,11 @@ export const ReportLog: React.FC<ReportLogProps> = ({
             filteredLogWithIndex.map(({ entry, originalIndex }) => {
               const isOut = entry.type === 'out';
               const isJustCopied = copiedIndex === originalIndex;
+              const hasEditPermission = canEditEntry(entry);
+              const hasDeletePermission = canDeleteEntry(entry);
+
+              // Ownership label: "By: name" or "Legacy / Unknown"
+              const creatorLabel = entry.createdByName ? `By: ${entry.createdByName}` : 'Legacy / Unknown';
 
               return (
                 <div
@@ -250,7 +257,7 @@ export const ReportLog: React.FC<ReportLogProps> = ({
                       : 'border-l-4 border-l-emerald-500 border-slate-200/60 dark:border-slate-700/60'
                   }`}
                 >
-                  {/* Left Single-tap Copy Button (touch target >= 44px) */}
+                  {/* Left Single-tap Copy Button */}
                   <button
                     onClick={() => handleCopySingle(entry, originalIndex)}
                     aria-label="Copy this entry to clipboard"
@@ -264,11 +271,25 @@ export const ReportLog: React.FC<ReportLogProps> = ({
                     {isJustCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   </button>
 
-                  {/* Middle Content */}
+                  {/* Middle Content with Creator Attribution */}
                   <div className="flex-1 min-w-0 font-mono">
-                    <div className="text-[11px] font-sans font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      {fmtDateShort(entry.ts)}
+                    <div className="flex items-center gap-2 flex-wrap text-[11px] font-sans font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      <span>{fmtDateShort(entry.ts)}</span>
+                      <span>·</span>
+                      {/* Creator badge visible to everyone on public view */}
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[10px] lowercase font-semibold ${
+                          entry.createdByName
+                            ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
+                            : 'bg-slate-200/70 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400'
+                        }`}
+                        title={entry.createdByName ? `Recorded by @${entry.createdByName}` : 'Historical entry recorded prior to RBAC'}
+                      >
+                        <User className="w-2.5 h-2.5" />
+                        <span>{creatorLabel}</span>
+                      </span>
                     </div>
+
                     <div className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5 truncate">
                       {isOut ? 'Electricity out: ' : 'Electricity back: '}
                       <span className={isOut ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
@@ -285,24 +306,36 @@ export const ReportLog: React.FC<ReportLogProps> = ({
                     )}
                   </div>
 
-                  {/* Right Actions: Edit & Delete (>= 44px hitboxes) */}
+                  {/* Right Actions: Edit & Soft Delete (RBAC protected) */}
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => onEditEntry(entry, originalIndex)}
-                      aria-label="Edit entry"
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition active:scale-90"
-                      title="Edit time or add note"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => onDeleteEntry(originalIndex)}
-                      aria-label="Delete entry"
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition active:scale-90"
-                      title="Delete entry"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {hasEditPermission ? (
+                      <button
+                        onClick={() => onEditEntry(entry, originalIndex)}
+                        aria-label="Edit entry"
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 transition active:scale-90"
+                        title="Edit entry"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <span 
+                        className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-300 dark:text-slate-700"
+                        title={currentUser ? "You cannot edit another user's entry" : "Login to edit entries"}
+                      >
+                        <Lock className="w-3 h-3" />
+                      </span>
+                    )}
+
+                    {hasDeletePermission && (
+                      <button
+                        onClick={() => onDeleteEntry(originalIndex)}
+                        aria-label="Delete entry"
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition active:scale-90"
+                        title="Move entry to Trash (recoverable by Admin)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -311,7 +344,7 @@ export const ReportLog: React.FC<ReportLogProps> = ({
         </div>
       </div>
 
-      {/* Action Footer */}
+      {/* Action Footer (Bulk delete removed completely) */}
       <div className="mt-5 pt-4 border-t border-slate-200/60 dark:border-slate-800/60">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           {/* Primary Copy All */}
@@ -391,21 +424,6 @@ export const ReportLog: React.FC<ReportLogProps> = ({
               </div>
             )}
           </div>
-
-          {/* Clear All */}
-          <button
-            onClick={onClearAll}
-            disabled={log.length === 0 && outAt === null}
-            className={`py-3 px-3.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 ${
-              log.length === 0 && outAt === null
-                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                : 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-            }`}
-            title="Clear all recorded entries"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Clear</span>
-          </button>
         </div>
       </div>
     </section>

@@ -1,6 +1,7 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, deleteApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 import { getFirestore } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
 // Read Firebase configuration from Vite environment variables without hardcoding
 export const firebaseConfig = {
@@ -16,6 +17,8 @@ export const firebaseConfig = {
 let app;
 let rtdb = null;
 let firestore = null;
+let auth = null;
+let googleProvider = null;
 
 try {
   if (!getApps().length) {
@@ -24,9 +27,13 @@ try {
     app = getApp();
   }
 
-  // Active Realtime Database for dimlog-d0f35 (responds in <500ms without gRPC hanging)
+  // Active Realtime Database for dimlog-d0f35
   rtdb = getDatabase(app, firebaseConfig.databaseURL);
   
+  // Initialize Auth
+  auth = getAuth(app);
+  googleProvider = new GoogleAuthProvider();
+
   // Optional Firestore instance if enabled in Google Cloud
   try {
     firestore = getFirestore(app);
@@ -37,5 +44,27 @@ try {
   console.error('[Firebase Init Error]:', error);
 }
 
-export { app, rtdb as db, rtdb, firestore };
+/**
+ * Creates a secondary Firebase App instance for admin user creation
+ * without signing out the currently logged in admin.
+ */
+export function createSecondaryAuth() {
+  const secondaryAppName = `secondary-auth-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+  const secondaryAuth = getAuth(secondaryApp);
+  return {
+    secondaryApp,
+    secondaryAuth,
+    cleanup: async () => {
+      try {
+        await deleteApp(secondaryApp);
+      } catch (err) {
+        console.warn('Failed to delete secondary app:', err);
+      }
+    }
+  };
+}
+
+export { app, rtdb as db, rtdb, firestore, auth, googleProvider };
 export default rtdb;
+

@@ -8,9 +8,15 @@ import {
   Keyboard, 
   Maximize2, 
   Minimize2,
-  SlidersHorizontal
+  SlidersHorizontal,
+  LogIn,
+  LogOut,
+  ShieldCheck,
+  User,
+  Clock
 } from 'lucide-react';
 import { CloudStatusBadge } from './CloudStatusBadge';
+import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
   currentTime: Date;
@@ -26,6 +32,8 @@ interface HeaderProps {
   isSyncing: boolean;
   networkError: boolean;
   isInitialLoading: boolean;
+  onOpenAuth: () => void;
+  onOpenAdminPanel: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -42,7 +50,11 @@ export const Header: React.FC<HeaderProps> = ({
   isSyncing,
   networkError,
   isInitialLoading,
+  onOpenAuth,
+  onOpenAdminPanel,
 }) => {
+  const { currentUser, userProfile, isAdmin, isApproved, userRole, canCreate, logout } = useAuth();
+
   const formattedTime = currentTime.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -60,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="relative w-full text-center pt-2 pb-4">
       {/* Top utility bar */}
-      <div className="flex items-center justify-between mb-3 px-2 sm:px-0">
+      <div className="flex items-center justify-between mb-3 px-2 sm:px-0 flex-wrap gap-2">
         {/* Creator Badge & Brand */}
         <div 
           className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-white/10 dark:bg-slate-900/60 backdrop-blur-md border border-slate-300/40 dark:border-slate-800 shadow-sm transition hover:scale-[1.02]"
@@ -90,8 +102,8 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Quick controls toolbar */}
-        <div className="flex items-center gap-1 sm:gap-2">
+        {/* User Auth Status & Quick Action Toolbar */}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
           {/* Cloud Status Indicator */}
           <CloudStatusBadge
             isSyncing={isSyncing}
@@ -99,11 +111,70 @@ export const Header: React.FC<HeaderProps> = ({
             isInitialLoading={isInitialLoading}
           />
 
+          {/* User Status / Login Button */}
+          {currentUser ? (
+            <div className="flex items-center gap-1.5 bg-white/10 dark:bg-slate-900/70 backdrop-blur-md px-2.5 py-1 rounded-full border border-slate-300/40 dark:border-slate-800 text-xs">
+              {isAdmin ? (
+                <button
+                  onClick={onOpenAdminPanel}
+                  className="flex items-center gap-1.5 font-bold text-purple-600 dark:text-purple-400 hover:underline"
+                  title="Open Super Admin Dashboard"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Admin Panel</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                  <User className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="font-bold">@{userProfile?.username || currentUser.displayName || 'user'}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                    !isApproved 
+                      ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' 
+                      : userRole === 'full' 
+                      ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20'
+                      : userRole === 'editor'
+                      ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-500/20'
+                      : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
+                  }`}>
+                    {!isApproved ? 'Pending' : userRole}
+                  </span>
+                </div>
+              )}
+
+              <button
+                onClick={() => logout()}
+                className="w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-500 transition"
+                title="Log out"
+              >
+                <LogOut className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 shadow-md shadow-indigo-600/20 transition active:scale-95 min-h-[36px]"
+              title="Log in with Username or Google Admin"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Log In</span>
+            </button>
+          )}
+
           {/* Add Manual Entry Button */}
           <button
-            onClick={onOpenManualEntry}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 transition active:scale-95 min-h-[38px]"
-            title="Log past or custom outage event"
+            onClick={() => {
+              if (!canCreate) {
+                onOpenAuth();
+              } else {
+                onOpenManualEntry();
+              }
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition active:scale-95 min-h-[36px] ${
+              canCreate
+                ? 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-700 dark:text-indigo-300 border-indigo-500/30'
+                : 'bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-300/40 dark:border-slate-700/60'
+            }`}
+            title={canCreate ? 'Log past or custom outage event' : 'Log in to add past entries'}
           >
             <PlusCircle className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Add Past Entry</span>

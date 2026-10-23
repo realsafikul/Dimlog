@@ -1,11 +1,13 @@
 import React from 'react';
-import { Zap, ZapOff, Copy } from 'lucide-react';
+import { Zap, ZapOff, Copy, Lock } from 'lucide-react';
 
 interface FloatingMobileBarProps {
   isOutage: boolean;
   onTogglePower: () => void;
   onCopyAll: () => void;
   hasEntries: boolean;
+  canAction?: boolean;
+  onUnauthorizedAction?: () => void;
 }
 
 export const FloatingMobileBar: React.FC<FloatingMobileBarProps> = ({
@@ -13,7 +15,17 @@ export const FloatingMobileBar: React.FC<FloatingMobileBarProps> = ({
   onTogglePower,
   onCopyAll,
   hasEntries,
+  canAction = true,
+  onUnauthorizedAction,
 }) => {
+  const handleToggle = () => {
+    if (!canAction) {
+      if (onUnauthorizedAction) onUnauthorizedAction();
+      return;
+    }
+    onTogglePower();
+  };
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 p-3 pb-[calc(12px+env(safe-area-inset-bottom,0px))] bg-white/90 dark:bg-slate-900/90 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-800 md:hidden shadow-lg transition-transform">
       <div className="max-w-md mx-auto flex items-center justify-between gap-3">
@@ -50,14 +62,21 @@ export const FloatingMobileBar: React.FC<FloatingMobileBarProps> = ({
           )}
 
           <button
-            onClick={onTogglePower}
+            onClick={handleToggle}
             className={`h-11 px-4 rounded-xl font-black text-xs text-white flex items-center gap-1.5 shadow-md active:scale-95 transition ${
-              isOutage
+              !canAction
+                ? 'bg-slate-700 opacity-90'
+                : isOutage
                 ? 'bg-gradient-to-r from-emerald-500 to-green-600 shadow-emerald-500/25'
                 : 'bg-gradient-to-r from-orange-500 to-rose-600 shadow-rose-500/25'
             }`}
           >
-            {isOutage ? (
+            {!canAction ? (
+              <>
+                <Lock className="w-3.5 h-3.5" />
+                <span>Login</span>
+              </>
+            ) : isOutage ? (
               <>
                 <Zap className="w-4 h-4" />
                 <span>Electricity Back</span>

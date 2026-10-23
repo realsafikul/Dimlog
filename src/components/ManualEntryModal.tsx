@@ -1,11 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { LogEntry } from '../types';
-import { X, Clock, Calendar, Check, Zap, ZapOff, FileText } from 'lucide-react';
+import { X, Clock, Calendar, Check, Zap, ZapOff, FileText, User } from 'lucide-react';
 
 interface ManualEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (entry: { type: 'out' | 'in'; ts: number; note?: string; id?: string }, isEditIndex?: number) => void;
+  onSave: (
+    entry: { 
+      type: 'out' | 'in'; 
+      ts: number; 
+      note?: string; 
+      id?: string;
+      createdBy?: string;
+      createdByName?: string;
+      createdAt?: number;
+    }, 
+    isEditIndex?: number
+  ) => void;
   editingEntry?: { entry: LogEntry; index: number } | null;
 }
 
@@ -57,6 +68,9 @@ export const ManualEntryModal: React.FC<ManualEntryModalProps> = ({
         ts,
         note: note.trim() || undefined,
         id: editingEntry?.entry.id,
+        createdBy: editingEntry?.entry.createdBy,
+        createdByName: editingEntry?.entry.createdByName,
+        createdAt: editingEntry?.entry.createdAt,
       },
       editingEntry ? editingEntry.index : undefined
     );
@@ -85,6 +99,15 @@ export const ManualEntryModal: React.FC<ManualEntryModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {editingEntry && (
+          <div className="mt-3 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs text-slate-500 flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5 text-indigo-500" />
+            <span>
+              Recorded originally by: <strong className="text-slate-700 dark:text-slate-300">{editingEntry.entry.createdByName || 'Legacy / Unknown'}</strong>
+            </span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {/* Status Selection Buttons */}

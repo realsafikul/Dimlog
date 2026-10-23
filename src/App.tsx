@@ -15,9 +15,9 @@ import {
   subscribeToOutageLogs, 
   recordPowerEventFirestore, 
   saveManualLogEntryFirestore, 
-  deleteLogEntryFirestore, 
-  clearAllLogsFirestore 
+  softDeleteLogEntryFirestore
 } from './services/firestore';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { PowerControlCard } from './components/PowerControlCard';
 import { TimelineChart } from './components/TimelineChart';
@@ -27,10 +27,23 @@ import { SettingsModal } from './components/SettingsModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
 import { WorkflowGuide } from './components/WorkflowGuide';
 import { FloatingMobileBar } from './components/FloatingMobileBar';
-import { Flame, Loader2, AlertCircle, RefreshCw, X } from 'lucide-react';
+import { AuthModal } from './components/AuthModal';
+import { AdminPanel } from './components/AdminPanel';
+import { Flame, Loader2, AlertCircle, Clock, X, ShieldAlert } from 'lucide-react';
 
-export default function App() {
-  // Main data state directly synchronized with Firestore
+function AppContent() {
+  const { 
+    currentUser, 
+    userProfile, 
+    isAdmin, 
+    isApproved, 
+    userRole, 
+    canCreate, 
+    canEditEntry, 
+    canDeleteEntry 
+  } = useAuth();
+
+  // Main data state directly synchronized with Firebase Realtime Database
   const [log, setLog] = useState<LogEntry[]>([]);
   const [outAt, setOutAt] = useState<number | null>(null);
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
@@ -38,12 +51,12 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Firestore loading & error states
+  // Loading & error states
   const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Undo state
+  // Undo state (only available if user can perform actions)
   const [previousState, setPreviousState] = useState<{ log: LogEntry[]; outAt: number | null } | null>(null);
   const [undoTimeout, setUndoTimeout] = useState<NodeJS.Timeout | null>(null);
 
@@ -52,6 +65,8 @@ export default function App() {
   const [editingEntry, setEditingEntry] = useState<{ entry: LogEntry; index: number } | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
 
   // Toast banner state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -102,7 +117,7 @@ export default function App() {
     }
   }, []);
 
-  // Real-time Cloud database synchronization on mount (no login required)
+  // Real-time Cloud database synchronization on mount
   useEffect(() => {
     setIsInitialLoading(true);
     let unsubStatus: (() => void) | undefined;
@@ -123,11 +138,11 @@ export default function App() {
           }
         },
         (error) => {
-          console.error('[Firestore/Firebase Error] Failed to fetch live power status:', error);
+          console.error('[Firebase Error] Failed to fetch live power status:', error);
         }
       );
 
-      // 2. Live listener for outage_logs
+      // 2. Live listener for outage logs
       unsubLogs = subscribeToOutageLogs(
         (cloudLogs) => {
           clearTimeout(safetyTimer);
@@ -139,13 +154,13 @@ export default function App() {
           }
         },
         (error) => {
-          console.error('[Firestore/Firebase Error] Failed to fetch outage logs:', error);
+          console.error('[Firebase Error] Failed to fetch outage logs:', error);
           clearTimeout(safetyTimer);
           setIsInitialLoading(false);
         }
       );
     } catch (err: any) {
-      console.error('[Firestore/Firebase Error] Initialization failed:', err);
+      console.error('[Firebase Error] Initialization failed:', err);
       clearTimeout(safetyTimer);
       setIsInitialLoading(false);
     }
@@ -157,7 +172,7 @@ export default function App() {
     };
   }, []);
 
-  // Real-time second clock ticker
+  // Real-time clock ticker
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -207,8 +222,14 @@ export default function App() {
     return Math.max(0, Math.floor((nowMs - lastInEntry.ts) / 1000));
   }, [log, outAt, nowMs]);
 
-  // Core 1-tap power toggle handler using Firestore
+  // Power toggle handler (Restricted to authorized users)
   const handleTogglePower = useCallback(async () => {
+    if (!canCreate) {
+      setIsAuthModalOpen(true);
+      showToast('🔒 Please sign in to record power events');
+      return;
+    }
+
     const now = Date.now();
     setPreviousState({ log: [...log], outAt });
     if (undoTimeout) clearTimeout(undoTimeout);
@@ -221,28 +242,35 @@ export default function App() {
     setIsSyncing(true);
     setErrorMessage(null);
 
+    const operatorName = userProfile?.username || currentUser?.displayName || 'Operator';
+    const operatorUid = currentUser?.uid || 'user';
+
     try {
-      await recordPowerEventFirestore(isNowOut ? 'out' : 'in', now);
+      await recordPowerEventFirestore(
+        isNowOut ? 'out' : 'in', 
+        now, 
+        { uid: operatorUid, name: operatorName }
+      );
       setIsSyncing(false);
 
       if (isNowOut) {
         playOutChime(settings.soundEnabled);
-        showToast('⚡ Electricity Out saved to Firestore · Generator ON');
+        showToast('⚡ Electricity Out recorded · Generator ON');
       } else {
         playInChime(settings.soundEnabled);
-        showToast('💡 Electricity Back saved to Firestore · Generator OFF');
+        showToast('💡 Electricity Back recorded · Generator OFF');
       }
     } catch (err: any) {
-      console.error('[Firestore Error] handleTogglePower failed:', err);
+      console.error('[Firebase Error] handleTogglePower failed:', err);
       setIsSyncing(false);
-      setErrorMessage(`Failed to save power event to Firestore: ${err.message || 'Check firestore.rules'}`);
-      showToast('⚠️ Firestore save failed');
+      setErrorMessage(`Failed to save power event to database: ${err.message}`);
+      showToast('⚠️ Database save failed');
     }
-  }, [log, outAt, settings, undoTimeout, showToast]);
+  }, [canCreate, log, outAt, settings, undoTimeout, showToast, userProfile, currentUser]);
 
-  // Undo handler using Firestore
+  // Undo handler (Restricted to authorized users)
   const handleUndo = useCallback(async () => {
-    if (!previousState) return;
+    if (!previousState || !canCreate) return;
     playClickSound(settings.soundEnabled);
 
     setIsSyncing(true);
@@ -251,78 +279,94 @@ export default function App() {
     try {
       const lastEntry = log[log.length - 1];
       if (lastEntry) {
-        await deleteLogEntryFirestore(lastEntry.id, previousState.log);
+        await softDeleteLogEntryFirestore(
+          lastEntry, 
+          log, 
+          { uid: currentUser?.uid || 'user', name: userProfile?.username || 'Operator' }
+        );
       }
       setIsSyncing(false);
       setPreviousState(null);
-      showToast('Reverted previous state in Firestore ✓');
+      showToast('Reverted previous state (moved to Trash) ✓');
     } catch (err: any) {
-      console.error('[Firestore Error] handleUndo failed:', err);
+      console.error('[Firebase Error] handleUndo failed:', err);
       setIsSyncing(false);
-      setErrorMessage(`Failed to undo in Firestore: ${err.message}`);
+      setErrorMessage(`Failed to undo: ${err.message}`);
     }
-  }, [previousState, log, settings, showToast]);
+  }, [previousState, canCreate, log, settings, showToast, currentUser, userProfile]);
 
-  // Delete an entry from Firestore
+  // Soft delete an entry to Trash with confirmation
   const handleDeleteEntry = useCallback(async (index: number) => {
     const target = log[index];
     if (!target) return;
 
+    if (!canDeleteEntry(target)) {
+      showToast('🔒 You are not authorized to delete this entry');
+      return;
+    }
+
+    if (!window.confirm('Move this log entry to Trash? (Admin can restore it later)')) {
+      return;
+    }
+
     setIsSyncing(true);
     setErrorMessage(null);
+
+    const userName = userProfile?.username || currentUser?.displayName || 'Operator';
+    const userUid = currentUser?.uid || 'user';
 
     try {
-      await deleteLogEntryFirestore(target.id, log);
+      await softDeleteLogEntryFirestore(target, log, { uid: userUid, name: userName });
       setIsSyncing(false);
       playClickSound(settings.soundEnabled);
-      showToast('Entry deleted from Firestore ✓');
+      showToast('Entry moved to Trash ✓');
     } catch (err: any) {
-      console.error('[Firestore Error] handleDeleteEntry failed:', err);
+      console.error('[Firebase Error] handleDeleteEntry failed:', err);
       setIsSyncing(false);
-      setErrorMessage(`Failed to delete entry in Firestore: ${err.message}`);
+      setErrorMessage(`Failed to delete entry: ${err.message}`);
     }
-  }, [log, settings, showToast]);
+  }, [log, canDeleteEntry, userProfile, currentUser, settings, showToast]);
 
-  // Edit or add entry to Firestore
+  // Edit or add entry to database
   const handleSaveModalEntry = useCallback(async (
-    entryData: { type: 'out' | 'in'; ts: number; note?: string; id?: string },
+    entryData: { 
+      type: 'out' | 'in'; 
+      ts: number; 
+      note?: string; 
+      id?: string;
+      createdBy?: string;
+      createdByName?: string;
+      createdAt?: number;
+    },
     editIndex?: number
   ) => {
+    if (!canCreate) {
+      setIsAuthModalOpen(true);
+      showToast('🔒 Please sign in to save entries');
+      return;
+    }
+
     setIsSyncing(true);
     setErrorMessage(null);
+
+    const userName = userProfile?.username || currentUser?.displayName || 'Operator';
+    const userUid = currentUser?.uid || 'user';
 
     try {
       const isLatest = typeof editIndex !== 'number' || editIndex === log.length - 1;
-      await saveManualLogEntryFirestore(entryData, isLatest);
+      await saveManualLogEntryFirestore(
+        entryData, 
+        isLatest, 
+        { uid: userUid, name: userName }
+      );
       setIsSyncing(false);
-      showToast('Entry saved to Firestore ✓');
+      showToast('Entry saved to database ✓');
     } catch (err: any) {
-      console.error('[Firestore Error] handleSaveModalEntry failed:', err);
+      console.error('[Firebase Error] handleSaveModalEntry failed:', err);
       setIsSyncing(false);
-      setErrorMessage(`Failed to save entry in Firestore: ${err.message}`);
+      setErrorMessage(`Failed to save entry: ${err.message}`);
     }
-  }, [log, showToast]);
-
-  // Clear all logs from Firestore with confirmation
-  const handleClearAll = useCallback(async () => {
-    if (log.length === 0 && outAt === null) return;
-    if (window.confirm('Clear all recorded entries from Firestore online database?')) {
-      setIsSyncing(true);
-      setErrorMessage(null);
-
-      try {
-        await clearAllLogsFirestore();
-        setIsSyncing(false);
-        setLog([]);
-        setOutAt(null);
-        showToast('All logs cleared from Firestore ✓');
-      } catch (err: any) {
-        console.error('[Firestore Error] handleClearAll failed:', err);
-        setIsSyncing(false);
-        setErrorMessage(`Failed to clear logs in Firestore: ${err.message}`);
-      }
-    }
-  }, [log, outAt, showToast]);
+  }, [canCreate, log, showToast, userProfile, currentUser]);
 
   // Keyboard shortcuts listener for PC users
   useEffect(() => {
@@ -342,8 +386,13 @@ export default function App() {
         }
       } else if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
-        setEditingEntry(null);
-        setIsManualModalOpen(true);
+        if (!canCreate) {
+          setIsAuthModalOpen(true);
+          showToast('🔒 Please log in to add entries');
+        } else {
+          setEditingEntry(null);
+          setIsManualModalOpen(true);
+        }
       } else if (e.key === 'd' || e.key === 'D') {
         e.preventDefault();
         setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
@@ -362,12 +411,14 @@ export default function App() {
         setIsManualModalOpen(false);
         setIsSettingsOpen(false);
         setIsShortcutsOpen(false);
+        setIsAuthModalOpen(false);
+        setIsAdminPanelOpen(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleTogglePower, log, showToast]);
+  }, [handleTogglePower, log, showToast, canCreate]);
 
   // Generator analytics calculations
   const generatorStats = useMemo(() => {
@@ -390,12 +441,34 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0a0d1c] dark:bg-[#0a0d1c] text-[#eef1ff] relative overflow-x-hidden transition-colors selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* Ambient background glowing blobs */}
+      {/* Ambient glowing blobs */}
       <div className="fixed -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/25 blur-3xl pointer-events-none animate-blob-slow" />
       <div className="fixed -bottom-32 -right-32 w-96 h-96 rounded-full bg-fuchsia-600/20 blur-3xl pointer-events-none animate-blob-reverse" />
 
       {/* Main Container */}
       <main className="relative z-10 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-28 md:pb-12 pt-safe pl-safe pr-safe">
+        {/* Pending Approval Notice Banner for Logged In Pending Users */}
+        {currentUser && !isApproved && (
+          <div className="mb-4 p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-lg backdrop-blur-md animate-fade">
+            <div className="flex items-center gap-2.5">
+              <Clock className="w-5 h-5 text-amber-400 flex-none animate-pulse" />
+              <span>
+                <strong>Access Pending:</strong> Your account (@{userProfile?.username || currentUser.displayName}) is waiting for Super Admin approval. You can view all records in real time.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Disabled Account Notice */}
+        {currentUser && userProfile?.status === 'disabled' && (
+          <div className="mb-4 p-4 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs sm:text-sm flex items-center gap-2.5 shadow-lg backdrop-blur-md">
+            <ShieldAlert className="w-5 h-5 text-rose-400 flex-none" />
+            <span>
+              Your account has been deactivated by the Super Admin. Please contact support if this was unexpected.
+            </span>
+          </div>
+        )}
+
         {/* Error Message Banner */}
         {errorMessage && (
           <div className="mb-4 p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-lg backdrop-blur-md animate-fade">
@@ -412,7 +485,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Header */}
+        {/* Header with Auth Status & Admin Panel Trigger */}
         <Header
           currentTime={currentTime}
           theme={theme}
@@ -435,21 +508,23 @@ export default function App() {
           isSyncing={isSyncing}
           networkError={!!errorMessage}
           isInitialLoading={isInitialLoading}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+          onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
         />
 
-        {/* Initial Loading Shimmer */}
+        {/* Initial Loading Indicator */}
         {isInitialLoading && (
           <div className="my-8 p-6 rounded-3xl bg-white/5 border border-slate-700/60 flex flex-col items-center justify-center gap-3 text-center backdrop-blur-md animate-pulse">
             <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
             <div className="text-sm font-semibold text-slate-300">
-              Connecting to Firestore &amp; fetching online power grid records...
+              Connecting to Firebase Realtime Database &amp; syncing online power grid records...
             </div>
           </div>
         )}
 
         {/* Responsive Dashboard Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 mt-4 items-start">
-          {/* Left Column (Primary Control & Telemetry on desktop, Top section on mobile) */}
+          {/* Left Column (Primary Control & Telemetry) */}
           <div className="lg:col-span-5 flex flex-col gap-4 sm:gap-6">
             {/* The Main Tactile Power Control Card */}
             <PowerControlCard
@@ -459,6 +534,11 @@ export default function App() {
               onTogglePower={handleTogglePower}
               canUndo={!!previousState}
               onUndo={handleUndo}
+              canAction={canCreate}
+              onUnauthorizedAction={() => {
+                setIsAuthModalOpen(true);
+                showToast('🔒 Please sign in to record power events');
+              }}
             />
 
             {/* Generator Runtime & Fuel Telemetry Card */}
@@ -530,11 +610,15 @@ export default function App() {
               outAt={outAt}
               onDeleteEntry={handleDeleteEntry}
               onEditEntry={(entry, index) => {
+                if (!canEditEntry(entry)) {
+                  showToast('🔒 You are not authorized to edit this entry');
+                  return;
+                }
                 setEditingEntry({ entry, index });
                 setIsManualModalOpen(true);
               }}
-              onClearAll={handleClearAll}
               onToast={showToast}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
             />
 
             {/* Operational Workflow Guide (Mobile/Tablet Placement) */}
@@ -551,7 +635,7 @@ export default function App() {
             <span className="font-bold bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
               Safikul Islam
             </span>{' '}
-            · VoltLog Online Firestore Edition
+            · VoltLog Multi-User Cloud Edition
           </p>
         </footer>
       </main>
@@ -568,6 +652,11 @@ export default function App() {
             }
           }}
           hasEntries={log.length > 0}
+          canAction={canCreate}
+          onUnauthorizedAction={() => {
+            setIsAuthModalOpen(true);
+            showToast('🔒 Please sign in to record power events');
+          }}
         />
       )}
 
@@ -596,13 +685,33 @@ export default function App() {
           setLog(data.log);
           setOutAt(data.outAt);
         }}
-        onClearAll={handleClearAll}
         onToast={showToast}
       />
 
       <ShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      {/* Authentication Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onToast={showToast}
+      />
+
+      {/* Super Admin Panel */}
+      <AdminPanel
+        isOpen={isAdminPanelOpen}
+        onClose={() => setIsAdminPanelOpen(false)}
+        logs={log}
+        outAt={outAt}
+        settings={settings}
+        onEditLog={(entry, index) => {
+          setEditingEntry({ entry, index });
+          setIsManualModalOpen(true);
+        }}
+        onToast={showToast}
       />
 
       {/* Global Toast Alert */}
@@ -612,5 +721,13 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }

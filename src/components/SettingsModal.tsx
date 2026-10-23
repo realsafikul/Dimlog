@@ -9,7 +9,6 @@ import {
   DollarSign, 
   Upload, 
   Download, 
-  Trash2, 
   Check, 
   SlidersHorizontal 
 } from 'lucide-react';
@@ -23,7 +22,6 @@ interface SettingsModalProps {
   log: LogEntry[];
   outAt: number | null;
   onImportJSON: (data: { log: LogEntry[]; outAt: number | null }) => void;
-  onClearAll: () => void;
   onToast: (msg: string) => void;
 }
 
@@ -35,7 +33,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   log,
   outAt,
   onImportJSON,
-  onClearAll,
   onToast,
 }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
@@ -218,21 +215,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onChange={handleFileUpload}
               />
             </div>
-          </div>
-
-          {/* Danger Zone */}
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onClearAll();
-              }}
-              className="w-full py-2.5 px-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-xs font-bold flex items-center justify-center gap-2 transition"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear Entire Report Log</span>
-            </button>
           </div>
 
           {/* Save & Close */}
